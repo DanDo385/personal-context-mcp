@@ -20,7 +20,7 @@ flowchart TB
     EDGE[["Public HTTPS edge<br/>Cloud Run"]] --> MCP
 
     subgraph Service["personal-context-mcp"]
-        MCP[MCP tool surface<br/>45 tools]
+        MCP[MCP tool surface<br/>48 tools]
         RULES[Deterministic rules]
         POLICY[Confidence policy engine]
         MCP --> RULES --> JEV[TypeSafe Jev<br/>System One classifier]
@@ -66,6 +66,7 @@ your machine.** It enqueues jobs; the laptop polls outbound and writes.
 - [Provider setup](#provider-setup)
 - [Backup and recovery](#backup-and-recovery)
 - [Testing](#testing)
+- [Verified](#verified)
 - [Roadmap](#roadmap)
 
 ---
@@ -661,7 +662,9 @@ Reported by the importer, not hidden:
 ### Prerequisites
 
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/)
-- Postgres 15+ with `pgvector` (Supabase provides this)
+- Postgres 13+ with `pgvector` (Supabase provides it). `pgcrypto` is not
+  required - `gen_random_uuid()` is core - and `pg_trgm` is optional: it
+  only accelerates name lookups and every query works without it.
 - A Google Cloud OAuth client, for production auth
 - Optionally, a [TypeSafe API key](https://console.typesafe.ai/keys) for Jev
 
@@ -757,12 +760,17 @@ Full walkthroughs, including each provider's limitations:
 
 Runs on your Mac. Outbound only.
 
+Note the `OBSIDIAN_SYNC_` prefix rather than a bare `OBSIDIAN_`: some
+machines already export `OBSIDIAN_VAULT_PATH` for unrelated tools, and an
+environment variable beats a `.env` file - which would silently redirect
+where this worker writes.
+
 ```bash
 uv sync
 cat > .env <<'EOF'
-OBSIDIAN_API_URL=https://ctx.example.com
-OBSIDIAN_API_KEY=<same value as PC_WORKER_API_KEY>
-OBSIDIAN_VAULT_PATH=~/Obsidian/Vault
+OBSIDIAN_SYNC_API_URL=https://ctx.example.com
+OBSIDIAN_SYNC_API_KEY=<same value as PC_WORKER_API_KEY>
+OBSIDIAN_SYNC_VAULT_PATH=~/Obsidian/Vault
 EOF
 
 uv run obsidian-sync check          # verify vault + credentials
@@ -817,6 +825,96 @@ Coverage focuses where a regression would be expensive: path traversal, ZIP
 guards, artifact capture honesty, memory deduplication, checkpoint
 idempotency, confidence thresholds, classifier outage, privacy routing, scope
 enforcement, and what an unauthenticated caller can see.
+
+---
+
+## Verified
+
+Everything below was executed against a real PostgreSQL 16 with pgvector, a
+real HTTP server, and a real filesystem vault - not mocked.
+
+| | |
+| --- | --- |
+| Unit + integration tests | **264 passed** |
+| `ruff check` | clean |
+| `mypy src` | clean, 77 files |
+| Migrations | applied from scratch on a virgin database |
+| MCP surface | 48 tools over Streamable HTTP, authenticated |
+
+The full vertical slice, end to end over HTTP:
+
+```
+ [ 1] connected + authenticated; 48 tools advertised
+ [ 2] memory_save -> created
+ [ 3] memory_search -> 1 hit
+ [ 4] project_create -> personal-ai
+ [ 5] list_create -> personal-ai-tasks
+ [ 6] list_add_item -> 'Test Gemini connector on iPhone'
+ [ 7] session_checkpoint -> created={conversations:1, session_summaries:1,
+                                     decisions:1, memories:2, tasks:1}
+ [ 8] checkpoint is idempotent -> second call skipped={decisions:1, memories:1, tasks:1}
+ [ 9] context_bootstrap -> items with provenance ['claude'], inside token budget
+ [10] artifact_save_text -> capture_status=captured
+ [11] artifact_save_bundle -> ONE artifact, 4 files, type=web_project
+ [12] classification -> semantic_category=code_project, project=personal-ai
+ [13] manifest -> tree preserved: index.html, public/diagram.svg, src/app.js, styles.css
+ [14] hashes verified against the real bytes
+ [15] reference artifact -> pending_import (not claimed as saved)
+ [16] artifact_queue_for_vault -> 5 jobs
+ [17] note_write -> 30-Research/mcp-oauth-across-providers.md queued
+ [18] sync_status -> {approved: 6}
+ [19] list_complete_item by stable id
+ [20] final bootstrap across active project state
+```
+
+Then the local worker drained the queue and wrote real files:
+
+```
+20-Projects/personal-ai/Artifacts/personal-ai-dashboard/README.md
+20-Projects/personal-ai/Artifacts/personal-ai-dashboard/index.html
+20-Projects/personal-ai/Artifacts/personal-ai-dashboard/public/diagram.svg
+20-Projects/personal-ai/Artifacts/personal-ai-dashboard/src/app.js
+20-Projects/personal-ai/Artifacts/personal-ai-dashboard/styles.css
+30-Research/mcp-oauth-across-providers.md
+```
+
+And the reverse direction:
+
+```
+ [1] a human edited the note in the vault
+ [2] worker pushed it up -> changed=True version=2
+ [3] canonical note now carries the human's text
+ [4] the edit is retrievable through MCP
+ [5] the human edits again before the next queued write lands
+ [6] server write REFUSED -> conflict; will not overwrite a human edit
+ [7] the file on disk is untouched
+```
+
+Bulk import, twice over the same archive:
+
+```
+first run:  conversations imported 1, messages 2,
+            attachments captured 1, referenced_only 1, reviews queued 1
+second run: imported 0, skipped_unchanged 1, messages 0
+            "This exact archive has already been imported."
+```
+
+Jev was exercised against the live `api.typesafe.ai` endpoint. Without a key
+the call returns `TypeSafeAuthenticationError`, the classifier degrades to
+deterministic rules with a complete answer set, and every tool keeps working -
+which is the behaviour that matters. Classification **quality** is unverified
+until a real `PC_TYPESAFE_API_KEY` is configured.
+
+### Not verified here
+
+- The four providers' connector UIs. Setup is documented from their current
+  docs; the OAuth flows need your own deployment and accounts to exercise.
+- Supabase Storage. The slice ran on the local storage backend; the Supabase
+  backend is implemented and bucket privacy is checked at startup, but it has
+  not been run against a live project.
+- Jev's classification accuracy, as above.
+- Real provider export archives. The importers were tested against archives
+  built to each documented format, not against your actual exports.
 
 ---
 

@@ -57,16 +57,28 @@ class ListService:
     # ---------------------------------------------------------------- lists
 
     async def resolve(self, reference: str) -> UUID | None:
+        """Resolve a UUID, slug or display name to a list id.
+
+        A UUID has to work: tools that have just created a list hand its id
+        straight back to `get()`.
+        """
         reference = (reference or "").strip()
         if not reference:
             return None
+        try:
+            as_uuid: UUID | None = UUID(reference)
+        except (ValueError, AttributeError):
+            as_uuid = None
+
         row = await self._db.fetchrow(
             """
             SELECT id FROM lists
-            WHERE slug = $1 OR lower(name) = lower($2)
-            ORDER BY (slug = $1) DESC
+            WHERE ($1::uuid IS NOT NULL AND id = $1::uuid)
+               OR slug = $2 OR lower(name) = lower($3)
+            ORDER BY ($1::uuid IS NOT NULL AND id = $1::uuid) DESC, (slug = $2) DESC
             LIMIT 1
             """,
+            as_uuid,
             slugify(reference),
             reference,
         )
@@ -126,14 +138,19 @@ class ListService:
             SELECT l.*, p.slug AS project_slug,
                    (SELECT count(*) FROM list_items i
                      WHERE i.list_id = l.id AND i.status = 'open') AS open_items,
-                   (SELECT count(*) FROM list_items i WHERE i.list_id = l.id) AS total_items
+                   (SELECT count(*) FROM list_items i WHERE i.list_id = l.id) AS total_items,
+                   CASE
+                     WHEN $1 = '' THEN 0
+                     WHEN lower(l.name) = lower($1) THEN 3
+                     WHEN l.name ILIKE $1 || '%' THEN 2
+                     ELSE 1
+                   END AS name_rank
             FROM lists l
             LEFT JOIN projects p ON p.id = l.project_id
             WHERE l.status = 'active'
               AND ($1 = '' OR l.search_tsv @@ websearch_to_tsquery('english', $1)
                            OR l.name ILIKE '%' || $1 || '%')
-            ORDER BY (CASE WHEN $1 = '' THEN 0 ELSE similarity(l.name, $1) END) DESC,
-                     l.updated_at DESC
+            ORDER BY name_rank DESC, l.updated_at DESC
             LIMIT $2
             """,
             query,

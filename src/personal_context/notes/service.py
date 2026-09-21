@@ -249,14 +249,29 @@ class NoteService:
         return [_record(r) for r in rows]
 
     async def similar_titles(self, title: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        """Existing notes a new one might duplicate - fed to the classifier."""
+        """Existing notes a new one might duplicate - fed to the classifier.
+
+        Matches on shared significant words rather than trigram similarity, so
+        this works without pg_trgm. The result only has to be good enough to
+        show the classifier "here is what already exists with a similar name".
+        """
+        words = [w for w in title.lower().split() if len(w) > 3][:6]
+        if not words:
+            return []
         rows = await self._db.fetch(
             """
-            SELECT slug, title, note_class FROM notes
-            WHERE similarity(title, $1) > 0.3
-            ORDER BY similarity(title, $1) DESC LIMIT $2
+            SELECT slug, title, note_class,
+                   (SELECT count(*) FROM unnest($1::text[]) w
+                     WHERE lower(n.title) LIKE '%' || w || '%') AS overlap
+            FROM notes n
+            WHERE EXISTS (
+                SELECT 1 FROM unnest($1::text[]) w
+                WHERE lower(n.title) LIKE '%' || w || '%'
+            )
+            ORDER BY overlap DESC, n.updated_at DESC
+            LIMIT $2
             """,
-            title,
+            words,
             limit,
         )
         return [dict(r) for r in rows]
@@ -281,7 +296,7 @@ class NoteService:
 
         content_hash = sha256_text(content.strip())
         if content_hash == row["content_sha256"]:
-            return {"note_id": row["id"], "changed": False, "version": row["version"]}
+            return {"note_id": str(row["id"]), "changed": False, "version": row["version"]}
 
         version = row["version"] + 1
         await self._db.execute(
@@ -300,4 +315,4 @@ class NoteService:
         await self._add_version(
             self._db, row["id"], version, row["title"], content.strip(), content_hash, author
         )
-        return {"note_id": row["id"], "changed": True, "version": version}
+        return {"note_id": str(row["id"]), "changed": True, "version": version}

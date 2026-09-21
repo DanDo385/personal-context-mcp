@@ -36,7 +36,7 @@ def run(vault: Path | None, api_url: str | None, dry_run: bool, once: bool) -> N
 
     if not settings.api_key.get_secret_value():
         raise click.ClickException(
-            "OBSIDIAN_API_KEY is not set. It must match PC_WORKER_API_KEY on the server."
+            "OBSIDIAN_SYNC_API_KEY is not set. It must match PC_WORKER_API_KEY on the server."
         )
 
     if once:
@@ -74,14 +74,16 @@ def check() -> None:
     async def probe() -> None:
         from obsidian_sync.client import SyncClient
 
+        # Lease zero jobs: this proves the URL and the credential work without
+        # taking work off the queue or marking anything as failed.
         client = SyncClient(settings)
+        original = settings.batch_size
+        settings.batch_size = 0
         try:
-            jobs = await client.lease()
-            click.secho(f"  server: reachable, {len(jobs)} job(s) leased", fg="green")
-            for job in jobs:
-                # A check must not consume work; hand it straight back.
-                await client.ack(str(job["id"]), status="failed", error="released by check")
+            await client.lease()
+            click.secho("  server: reachable and credential accepted", fg="green")
         finally:
+            settings.batch_size = original
             await client.aclose()
 
     asyncio.run(probe())

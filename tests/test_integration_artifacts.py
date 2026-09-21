@@ -227,3 +227,44 @@ async def test_attaching_to_a_project_records_a_relationship(services) -> None:
         record.id,
     )
     assert relation == 1
+
+
+async def test_references_deduplicate_per_conversation(services) -> None:
+    """A byte-less artifact has no hash, so it needs its own dedup guard.
+
+    Without this, re-running an import accumulates a fresh placeholder for
+    every file the export named but did not contain.
+    """
+    conversation_id, _ = await services.sessions.ensure_conversation(
+        provider="chatgpt", provider_conversation_id="dedupe-1"
+    )
+    first = await services.artifacts.register_reference(
+        title="lost-canvas-doc.md",
+        source_conversation_id=conversation_id,
+        expected_files=[{"filename": "lost-canvas-doc.md"}],
+    )
+    second = await services.artifacts.register_reference(
+        title="lost-canvas-doc.md",
+        source_conversation_id=conversation_id,
+        expected_files=[{"filename": "lost-canvas-doc.md"}],
+    )
+
+    assert second.id == first.id
+    assert await services.db.fetchval("SELECT count(*) FROM artifacts") == 1
+
+
+async def test_references_in_different_conversations_stay_separate(services) -> None:
+    """Two conversations can each mention a file called 'photo.jpg'."""
+    a, _ = await services.sessions.ensure_conversation(
+        provider="chatgpt", provider_conversation_id="conv-a"
+    )
+    b, _ = await services.sessions.ensure_conversation(
+        provider="claude", provider_conversation_id="conv-b"
+    )
+    first = await services.artifacts.register_reference(
+        title="photo.jpg", source_conversation_id=a
+    )
+    second = await services.artifacts.register_reference(
+        title="photo.jpg", source_conversation_id=b
+    )
+    assert first.id != second.id

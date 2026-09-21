@@ -53,7 +53,7 @@ class ObsidianSyncWorker:
                 except httpx.HTTPStatusError as exc:
                     if exc.response.status_code == 401:
                         logger.error(
-                            "worker rejected: check OBSIDIAN_API_KEY matches "
+                            "worker rejected: check OBSIDIAN_SYNC_API_KEY matches "
                             "PC_WORKER_API_KEY on the server"
                         )
                     else:

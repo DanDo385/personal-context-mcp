@@ -165,7 +165,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS memories_sha_subject_key
 CREATE INDEX IF NOT EXISTS memories_search_idx ON memories USING GIN (search_tsv);
 CREATE INDEX IF NOT EXISTS memories_status_idx ON memories (status, importance DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS memories_project_idx ON memories (project_id) WHERE project_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS memories_subject_trgm_idx ON memories USING GIN (subject gin_trgm_ops);
+-- Trigram indexes accelerate the ILIKE name lookups. They are skipped when
+-- pg_trgm is unavailable; the queries themselves do not depend on it.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        CREATE INDEX IF NOT EXISTS memories_subject_trgm_idx
+            ON memories USING GIN (subject gin_trgm_ops);
+    END IF;
+END $$;
 DROP TRIGGER IF EXISTS memories_touch ON memories;
 CREATE TRIGGER memories_touch BEFORE UPDATE ON memories
     FOR EACH ROW EXECUTE FUNCTION pc_touch_updated_at();
@@ -249,7 +256,12 @@ CREATE TABLE IF NOT EXISTS lists (
                   (to_tsvector('english', name || ' ' || coalesce(description,''))) STORED
 );
 CREATE INDEX IF NOT EXISTS lists_search_idx ON lists USING GIN (search_tsv);
-CREATE INDEX IF NOT EXISTS lists_name_trgm_idx ON lists USING GIN (name gin_trgm_ops);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        CREATE INDEX IF NOT EXISTS lists_name_trgm_idx
+            ON lists USING GIN (name gin_trgm_ops);
+    END IF;
+END $$;
 DROP TRIGGER IF EXISTS lists_touch ON lists;
 CREATE TRIGGER lists_touch BEFORE UPDATE ON lists
     FOR EACH ROW EXECUTE FUNCTION pc_touch_updated_at();

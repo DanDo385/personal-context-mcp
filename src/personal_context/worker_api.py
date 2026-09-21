@@ -54,8 +54,27 @@ async def lease_jobs(request: Request, services: Services) -> Response:
     limit = min(int(body.get("limit") or 10), 50)
 
     jobs = await services.sync_queue.lease(worker_id=worker_id, limit=limit)
-    rendered = [await _render_job(services, job) for job in jobs]
-    return JSONResponse({"jobs": [j for j in rendered if j is not None]}, status_code=200)
+
+    deliverable: list[dict[str, Any]] = []
+    for job in jobs:
+        rendered = await _render_job(services, job)
+        if rendered is not None:
+            deliverable.append(rendered)
+            continue
+        # A job we cannot render was still leased. Release it explicitly with
+        # a reason, rather than leaving a row that is invisible to the worker
+        # and silently blocked until its lease expires.
+        await services.sync_queue.fail(
+            job["id"],
+            worker_id=worker_id,
+            error="server could not render this job; its target may have been deleted",
+        )
+        logger.warning(
+            "released an unrenderable sync job",
+            extra={"job_type": job["job_type"], "vault_path": job["vault_path"]},
+        )
+
+    return JSONResponse({"jobs": deliverable}, status_code=200)
 
 
 async def _render_job(services: Services, job: dict[str, Any]) -> dict[str, Any] | None:

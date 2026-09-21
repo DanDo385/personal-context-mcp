@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 AuthMode = Literal["google", "github", "jwt", "static", "none"]
 StorageBackend = Literal["supabase", "local"]
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     server_id: str = ""
 
     #: Hostnames the server will answer on (DNS-rebinding protection).
-    allowed_hosts: list[str] = Field(default_factory=list)
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # ------------------------------------------------------------- database
     database_url: SecretStr = SecretStr("")
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     #: The only identities allowed in. Matched against the token's email and
     #: subject claims. An empty list in a non-dev environment is refused at
     #: startup rather than silently letting the world in.
-    allowed_subjects: list[str] = Field(default_factory=list)
+    allowed_subjects: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     oauth_client_id: str = ""
     oauth_client_secret: SecretStr = SecretStr("")
@@ -75,12 +75,12 @@ class Settings(BaseSettings):
     jwt_audience: str = ""
 
     #: auth_mode="static": dev/test only. Maps bearer token -> principal.
-    static_tokens: dict[str, str] = Field(default_factory=dict)
+    static_tokens: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
 
     #: Capability scopes granted per OAuth client, by client name substring.
     #: e.g. {"chatgpt": ["context:read", "memory:read"], "*": ["*"]}
     #: See personal_context/auth/scopes.py for the vocabulary.
-    client_scope_policy: dict[str, list[str]] = Field(default_factory=dict)
+    client_scope_policy: Annotated[dict[str, list[str]], NoDecode] = Field(default_factory=dict)
 
     #: Shared secret the local Obsidian worker uses on /worker/*. Separate
     #: from MCP auth: the worker is our own code, not a model.
@@ -137,7 +137,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------- obsidian
     obsidian_enabled: bool = True
     obsidian_mirror_max_mb: float = 5.0
-    obsidian_vault_roots: dict[str, str] = Field(
+    obsidian_vault_roots: Annotated[dict[str, str], NoDecode] = Field(
         default_factory=lambda: {
             "inbox": "00-Inbox",
             "daily": "10-Daily",

@@ -37,6 +37,11 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
     # pgvector's wire format is not known to asyncpg. Its text representation
     # ("[1,2,3]") is accepted on input and easy to parse on output, which is
     # plenty for our volumes and avoids a binary-codec dependency.
+    #
+    # This must tolerate the type being absent: on a brand-new database the
+    # pool is opened by `personal-context migrate`, before migration 0001 has
+    # created the extension. asyncpg signals that as a bare ValueError from
+    # type introspection, not only as UndefinedObjectError.
     try:
         await conn.set_type_codec(
             "vector",
@@ -44,8 +49,11 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
             decoder=_decode_vector,
             format="text",
         )
-    except asyncpg.exceptions.UndefinedObjectError:  # pragma: no cover
-        logger.warning("pgvector type not found; vector search disabled")
+    except (asyncpg.exceptions.UndefinedObjectError, ValueError):
+        logger.info(
+            "pgvector type not registered on this connection; "
+            "run migrations, then reconnect to enable vector search"
+        )
 
 
 def _encode_vector(value: Sequence[float] | None) -> str | None:

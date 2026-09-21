@@ -29,8 +29,10 @@ def _test_dsn() -> str | None:
     if not dsn:
         return None
     # Refuse to run destructive schema work against anything not obviously a
-    # scratch database.
-    tail = dsn.rsplit("/", 1)[-1].split("?")[0].lower()
+    # scratch database. Strip the query string FIRST: a unix-socket DSN puts a
+    # path in `?host=`, and splitting on "/" before that reads the socket
+    # directory as the database name.
+    tail = dsn.split("?", 1)[0].rsplit("/", 1)[-1].lower()
     if "test" not in tail:
         pytest.exit(
             f"{TEST_DB_ENV} must point at a database whose name contains 'test'. "
@@ -102,3 +104,44 @@ def vault(tmp_path: Path) -> Path:
     for name in ("00-Inbox", "20-Projects", "30-Research", "60-Resources"):
         (root / name).mkdir(parents=True)
     return root
+
+
+@pytest.fixture
+async def live_server(settings):
+    """Run the real app on a loopback port.
+
+    FastMCP's client speaks httpx2 and does not honour an injected ASGI
+    transport, so an in-process shim does not work. A real socket also tests
+    the streaming transport rather than a stand-in for it.
+    """
+    import asyncio
+    import socket
+
+    import uvicorn
+
+    from personal_context.server import create_app
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    settings.base_url = f"http://127.0.0.1:{port}"
+    config = uvicorn.Config(
+        create_app(settings), host="127.0.0.1", port=port,
+        log_config=None, access_log=False, lifespan="on",
+    )
+    server = uvicorn.Server(config)
+    task = asyncio.create_task(server.serve())
+
+    for _ in range(200):
+        if server.started:
+            break
+        await asyncio.sleep(0.05)
+    else:  # pragma: no cover
+        raise RuntimeError("uvicorn did not start")
+
+    try:
+        yield settings
+    finally:
+        server.should_exit = True
+        await task

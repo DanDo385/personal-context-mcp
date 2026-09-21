@@ -1,12 +1,20 @@
 -- 0001_extensions.sql
 -- Extensions and shared helpers.
 --
--- Supabase ships pgcrypto and vector; on a vanilla Postgres you need the
--- pgvector extension installed on the server before this runs.
+-- `vector` is the only hard requirement: the embedding columns are typed
+-- VECTOR(1536) and cannot exist without it. Supabase ships it.
+--
+-- `gen_random_uuid()` is core in PostgreSQL 13+, so pgcrypto is deliberately
+-- NOT required. `pg_trgm` is optional - it only accelerates the ILIKE name
+-- lookups, and every query works without it.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+DO $$ BEGIN
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'pg_trgm unavailable; name lookups will run without its index';
+END $$;
 
 -- Every table with an updated_at column gets this trigger.
 CREATE OR REPLACE FUNCTION pc_touch_updated_at() RETURNS trigger

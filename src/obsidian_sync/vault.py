@@ -44,7 +44,7 @@ class Vault:
         self._dry_run = dry_run
         if not self._root.is_dir():
             raise FileNotFoundError(
-                f"Vault directory does not exist: {self._root}. Set OBSIDIAN_VAULT_PATH."
+                f"Vault directory does not exist: {self._root}. Set OBSIDIAN_SYNC_VAULT_PATH."
             )
 
     def resolve(self, relative_path: str) -> Path:

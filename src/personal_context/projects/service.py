@@ -113,12 +113,17 @@ class ProjectService:
         rows = await self._db.fetch(
             """
             SELECT p.id, p.slug, p.name, p.description, p.status, p.goals, p.last_active_at,
-                   0 AS open_task_count, 0 AS decision_count
+                   0 AS open_task_count, 0 AS decision_count,
+                   CASE
+                     WHEN lower(p.name) = lower($1) THEN 3
+                     WHEN p.name ILIKE $1 || '%' THEN 2
+                     ELSE 1
+                   END AS name_rank
             FROM projects p
             WHERE p.name ILIKE '%' || $1 || '%'
                OR p.slug ILIKE '%' || $1 || '%'
                OR coalesce(p.description, '') ILIKE '%' || $1 || '%'
-            ORDER BY similarity(p.name, $1) DESC, p.last_active_at DESC
+            ORDER BY name_rank DESC, p.last_active_at DESC
             LIMIT $2
             """,
             query,

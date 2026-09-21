@@ -493,6 +493,15 @@ class SessionService:
                 routing, conversation_id=conversation_id, event_id=event_id
             )
 
+        if result.degraded:
+            # Classification runs before the transaction, so it had no
+            # conversation id to queue against. Now there is one.
+            await self._classification.queue_reclassification(
+                object_type="checkpoint",
+                object_id=conversation_id,
+                reason=result.error or "classifier_degraded",
+            )
+
         await self._audit.record(
             tool="session_checkpoint",
             action="create",

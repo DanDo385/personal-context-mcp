@@ -14,7 +14,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class WorkerSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore", env_prefix="OBSIDIAN_"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        # Deliberately specific: a bare OBSIDIAN_ prefix collides with
+        # variables other tools already export (OBSIDIAN_VAULT_PATH is a
+        # common one), and an unrelated export must not redirect where
+        # this worker writes.
+        env_prefix="OBSIDIAN_SYNC_",
     )
 
     #: Base URL of the Personal Context service (outbound target).

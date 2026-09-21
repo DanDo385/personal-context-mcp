@@ -287,6 +287,26 @@ class ArtifactService:
             )
 
         slug = slugify(title, fallback="artifact")
+
+        # Captured artifacts deduplicate on SHA-256. A reference has no bytes
+        # and therefore no hash, so it needs its own guard: the same filename
+        # against the same conversation is the same missing file. Without
+        # this, re-importing an export accumulates placeholder artifacts.
+        if source_conversation_id is not None:
+            existing = await self._db.fetchval(
+                """
+                SELECT id FROM artifacts
+                WHERE slug = $1 AND source_conversation_id = $2
+                  AND storage_status <> 'captured'
+                LIMIT 1
+                """,
+                slug,
+                source_conversation_id,
+            )
+            if existing is not None:
+                record = await self.get(existing)
+                if record is not None:
+                    return record
         artifact_id = await self._db.fetchval(
             """
             INSERT INTO artifacts (
