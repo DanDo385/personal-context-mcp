@@ -1,0 +1,78 @@
+[project]
+name = "personal-context"
+version = "0.1.0"
+description = "Provider-neutral shared memory, knowledge, list, project and artifact system exposed over MCP"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastmcp>=4.0.5",
+    "mcp>=2.2.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "asyncpg>=0.30",
+    "httpx>=0.28",
+    "typesafe-sdk>=0.7.1",
+    "starlette>=0.41",
+    "uvicorn[standard]>=0.34",
+    "python-json-logger>=3.1",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+worker = [
+    "watchfiles>=1.0",
+]
+
+[project.scripts]
+personal-context = "personal_context.cli:main"
+obsidian-sync = "obsidian_sync.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "respx>=0.22",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = ["personal_context", "obsidian_sync"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "ASYNC", "S"]
+ignore = ["E501", "B008", "RUF012", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "ASYNC"]
+"scripts/*" = ["S"]
+# MCP tool signatures use `= []` for optional list parameters because that is
+# what produces a clean JSON schema for the calling model. Pydantic validates
+# and copies each call's arguments, so the default is never mutated.
+"src/personal_context/mcp/*" = ["B006"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["personal_context", "obsidian_sync"]
+mypy_path = "src"
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true

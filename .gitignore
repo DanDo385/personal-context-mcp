@@ -1,0 +1,34 @@
+# Secrets — never commit a filled-in environment file.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data
+.data/
+*.sqlite3
+
+# Provider exports — these are your entire conversation history in plaintext.
+exports/
+*.zip
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

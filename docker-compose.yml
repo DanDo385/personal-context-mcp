@@ -1,0 +1,51 @@
+# Local development stack: Postgres with pgvector, plus the MCP server.
+#
+# This is NOT the production topology. In production, Postgres and object
+# storage are Supabase, and the server runs on Cloud Run. See the README.
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: personal_context
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d personal_context"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PC_ENVIRONMENT: dev
+      PC_BASE_URL: http://localhost:8080
+      PC_DATABASE_URL: postgresql://postgres:postgres@db:5432/personal_context
+      # Development auth. Refused outright when PC_ENVIRONMENT=prod.
+      PC_AUTH_MODE: static
+      PC_STATIC_TOKENS: '{"dev-token-change-me":"you@example.com"}'
+      PC_ALLOWED_SUBJECTS: you@example.com
+      PC_STORAGE_BACKEND: local
+      PC_LOCAL_STORAGE_ROOT: /data/storage
+      PC_CLASSIFIER: ${PC_CLASSIFIER:-rules}
+      PC_TYPESAFE_API_KEY: ${PC_TYPESAFE_API_KEY:-}
+      PC_WORKER_API_KEY: dev-worker-key
+      PC_OAUTH_SIGNING_KEY: dev-signing-key
+    ports:
+      - "8080:8080"
+    volumes:
+      - storage:/data/storage
+    command: >
+      sh -c "personal-context migrate && personal-context serve"
+
+volumes:
+  pgdata:
+  storage:
