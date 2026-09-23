@@ -1143,7 +1143,7 @@ wheels = [
 ]
 
 [[package]]
-name = "personal-context"
+name = "personal-context-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

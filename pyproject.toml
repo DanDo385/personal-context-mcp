@@ -1,5 +1,5 @@
 [project]
-name = "personal-context"
+name = "personal-context-mcp"
 version = "0.1.0"
 description = "Provider-neutral shared memory, knowledge, list, project and artifact system exposed over MCP"
 readme = "README.md"

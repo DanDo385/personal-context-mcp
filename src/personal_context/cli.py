@@ -34,7 +34,7 @@ async def _with_services(settings: Settings):
 
 
 @click.group()
-@click.version_option(package_name="personal-context")
+@click.version_option(package_name="personal-context-mcp")
 def main() -> None:
     """Shared AI context: memory, projects, lists, notes and artifacts."""
 
