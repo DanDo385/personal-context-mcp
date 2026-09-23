@@ -36,7 +36,7 @@ ways, in descending order of how reliably ChatGPT uses them:
 
 1. the custom instruction above
 2. MCP tool descriptions, which are written to be self-sufficient
-3. MCP prompts and the `personal-context://guide/<name>` resources
+3. MCP prompts and the `personal-context-mcp://guide/<name>` resources
 
 ## 5. Surfaces and limitations
 
@@ -52,7 +52,7 @@ ways, in descending order of how reliably ChatGPT uses them:
 occasionally disappear from the directory and need re-adding; OAuth sometimes
 completes without the connector becoming available in chat until a reload. If
 tools stop appearing, disconnect and re-add the connector before assuming the
-server is at fault — `/healthz` and `personal-context check` will tell you
+server is at fault — `/healthz` and `personal-context-mcp check` will tell you
 whether it is.
 
 **Attachment limitation.** As with every provider, an uploaded file that is

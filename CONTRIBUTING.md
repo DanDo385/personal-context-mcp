@@ -1,4 +1,4 @@
-# Working on personal-context
+# Working on personal-context-mcp
 
 ## Running a local Postgres without Docker
 
@@ -18,14 +18,14 @@ sys.path.insert(0, ".tools/pgs")
 import pgserver
 db = pgserver.get_server(str(pathlib.Path(".data/pg").absolute()), cleanup_mode=None)
 print(db.get_uri())
-db.psql("CREATE DATABASE personal_context_test;")
+db.psql("CREATE DATABASE personal_context_mcp_test;")
 PY
 ```
 
 It listens on a unix socket, so the DSN takes this shape:
 
 ```bash
-export PC_TEST_DATABASE_URL="postgresql://postgres@/personal_context_test?host=/abs/path/.data/pg"
+export PC_TEST_DATABASE_URL="postgresql://postgres@/personal_context_mcp_test?host=/abs/path/.data/pg"
 uv run pytest
 ```
 

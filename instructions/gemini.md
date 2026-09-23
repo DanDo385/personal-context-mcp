@@ -40,7 +40,7 @@ same context. Workflow guidance reaches Gemini three ways instead:
 1. the saved instruction above
 2. MCP tool descriptions, written to stand on their own
 3. MCP prompts (`recall_context`, `checkpoint_session`, `capture_artifacts`,
-   `manage_lists`) and the `personal-context://guide/<name>` resources, which
+   `manage_lists`) and the `personal-context-mcp://guide/<name>` resources, which
    serve the full text of each skill on demand
 
 ## 4. Surfaces and limitations

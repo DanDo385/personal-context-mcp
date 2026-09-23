@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 
 from conftest import requires_db
-from personal_context.server import create_app
+from personal_context_mcp.server import create_app
 
 pytestmark = requires_db
 
@@ -14,7 +14,7 @@ pytestmark = requires_db
 
 
 async def test_enqueue_validates_the_path(services) -> None:
-    from personal_context.errors import PathSecurityError
+    from personal_context_mcp.errors import PathSecurityError
 
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     try:
@@ -247,8 +247,8 @@ async def test_an_unmarked_line_is_reported_not_matched_by_text(services) -> Non
 
 
 async def test_every_classification_is_persisted(services) -> None:
-    from personal_context.auth.principal import Principal
-    from personal_context.models import CheckpointFact
+    from personal_context_mcp.auth.principal import Principal
+    from personal_context_mcp.models import CheckpointFact
 
     await services.sessions.checkpoint(
         provider="claude",
@@ -271,7 +271,7 @@ async def test_every_classification_is_persisted(services) -> None:
 
 
 async def test_audit_records_who_changed_what(services) -> None:
-    from personal_context.auth.principal import Principal
+    from personal_context_mcp.auth.principal import Principal
 
     principal = Principal(
         subject="tester@example.com", client_id="cl-1",
@@ -296,8 +296,8 @@ async def test_audit_records_who_changed_what(services) -> None:
 
 
 async def test_a_degraded_classification_queues_reclassification(services) -> None:
-    from personal_context.auth.principal import Principal
-    from personal_context.classifier.rules import RulesClassifier
+    from personal_context_mcp.auth.principal import Principal
+    from personal_context_mcp.classifier.rules import RulesClassifier
 
     services.classification._classifier = RulesClassifier(degraded=True, error="forced")
 

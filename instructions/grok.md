@@ -27,7 +27,7 @@ from `instructions/shared.md`.
 
 Where Grok supports skill-like packaging, the directories under `skills/` are
 portable Markdown and can be used directly. Where it does not, the MCP tool
-descriptions and the `personal-context://guide/<name>` resources carry the
+descriptions and the `personal-context-mcp://guide/<name>` resources carry the
 same guidance.
 
 ## 4. Surfaces and limitations

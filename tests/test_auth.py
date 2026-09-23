@@ -8,16 +8,16 @@ import pytest
 from fastmcp.server.auth import AccessToken
 from fastmcp.utilities.authorization import AuthContext, require_scopes
 
-from personal_context.auth import scopes
-from personal_context.auth.provider import _identities, build_auth_provider
-from personal_context.auth.scopes import (
+from personal_context_mcp.auth import scopes
+from personal_context_mcp.auth.provider import _identities, build_auth_provider
+from personal_context_mcp.auth.scopes import (
     ALL_SCOPES,
     DEFAULT_SCOPES,
     expand,
     provider_from_client,
     resolve_client_scopes,
 )
-from personal_context.config import Settings
+from personal_context_mcp.config import Settings
 
 
 def _settings(**overrides: Any) -> Settings:

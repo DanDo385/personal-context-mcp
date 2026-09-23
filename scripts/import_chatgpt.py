@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Import a ChatGPT export. Thin wrapper over `personal-context import`."""
+"""Import a ChatGPT export. Thin wrapper over `personal-context-mcp import`."""
 
 from __future__ import annotations
 

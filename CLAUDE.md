@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 uv sync --all-groups                       # install, including dev group
-uv run personal-context migrate            # apply migrations (--status to see pending)
-uv run personal-context check              # validate config, DB, migrations, buckets, Jev
-uv run personal-context serve              # run the MCP server
+uv run personal-context-mcp migrate            # apply migrations (--status to see pending)
+uv run personal-context-mcp check              # validate config, DB, migrations, buckets, Jev
+uv run personal-context-mcp serve              # run the MCP server
 docker compose up -d db                    # Postgres 17 + pgvector on :5432
 
 uv run ruff check src tests
 uv run ruff format src tests
-uv run mypy src                            # packages personal_context, obsidian_sync
+uv run mypy src                            # packages personal_context_mcp, obsidian_sync
 uv run pytest
 uv run pytest tests/test_paths.py::test_name -x   # single test
 ```
@@ -33,7 +33,7 @@ Two tiers, split by whether a database is needed:
   `test`.
 
 ```bash
-export PC_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_context_test
+export PC_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_context_mcp_test
 uv run pytest
 ```
 
@@ -120,4 +120,4 @@ full-text search alone, so nothing may assume a vector is present.
 
 - `skills/` — eight portable workflow skills handed to the providers.
 - `instructions/` — per-provider connector setup plus the shared custom instruction.
-- `scripts/` — thin wrappers over `personal-context import <provider>` / `reclassify`.
+- `scripts/` — thin wrappers over `personal-context-mcp import <provider>` / `reclassify`.

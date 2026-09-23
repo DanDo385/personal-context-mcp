@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from personal_context.artifacts.archives import ArchiveLimits, iter_safe_entries
-from personal_context.errors import ArchiveSecurityError
+from personal_context_mcp.artifacts.archives import ArchiveLimits, iter_safe_entries
+from personal_context_mcp.errors import ArchiveSecurityError
 
 
 def _zip(path: Path, members: dict[str, bytes]) -> Path:
@@ -121,7 +121,7 @@ def test_reject_path_guard(name: str) -> None:
     stays because we do not want to depend on that, but the only honest way to
     exercise it is to call it.
     """
-    from personal_context.artifacts.archives import _reject_path
+    from personal_context_mcp.artifacts.archives import _reject_path
 
     with pytest.raises(ArchiveSecurityError):
         _reject_path(name)

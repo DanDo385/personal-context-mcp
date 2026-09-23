@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from personal_context.artifacts.keys import (
+from personal_context_mcp.artifacts.keys import (
     archive_key,
     artifact_prefix,
     object_key,
     sanitize_relative_path,
 )
-from personal_context.errors import PathSecurityError
-from personal_context.obsidian.paths import VaultPaths, resolve_in_vault, validate_vault_path
+from personal_context_mcp.errors import PathSecurityError
+from personal_context_mcp.obsidian.paths import VaultPaths, resolve_in_vault, validate_vault_path
 
 ROOTS = {
     "inbox": "00-Inbox",

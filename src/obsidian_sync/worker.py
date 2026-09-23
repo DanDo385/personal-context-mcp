@@ -14,8 +14,8 @@ import httpx
 from obsidian_sync.client import SyncClient
 from obsidian_sync.config import WorkerSettings
 from obsidian_sync.vault import Vault
-from personal_context.logging_setup import configure_logging, get_logger
-from personal_context.util import sha256_bytes
+from personal_context_mcp.logging_setup import configure_logging, get_logger
+from personal_context_mcp.util import sha256_bytes
 
 logger = get_logger(__name__)
 

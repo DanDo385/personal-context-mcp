@@ -7,18 +7,18 @@ from typing import Any
 import pytest
 from typesafe_sdk import Choice, Noul, Score
 
-from personal_context.classifier.base import Answer, ClassificationResult
-from personal_context.classifier.jev import JevClassifier, _normalise_answers
-from personal_context.classifier.policy import Band, PolicyEngine, Verdict
-from personal_context.classifier.questions import (
+from personal_context_mcp.classifier.base import Answer, ClassificationResult
+from personal_context_mcp.classifier.jev import JevClassifier, _normalise_answers
+from personal_context_mcp.classifier.policy import Band, PolicyEngine, Verdict
+from personal_context_mcp.classifier.questions import (
     IMPORTANCE_LEVELS,
     QUESTIONS_VERSION,
     UNASSIGNED,
     artifact_questions,
     checkpoint_questions,
 )
-from personal_context.classifier.rules import RulesClassifier, detect_artifact_type
-from personal_context.config import Settings
+from personal_context_mcp.classifier.rules import RulesClassifier, detect_artifact_type
+from personal_context_mcp.config import Settings
 
 # ------------------------------------------------------- question building
 

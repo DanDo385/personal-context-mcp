@@ -45,7 +45,7 @@ tools, how to resolve a list name — belong where they are loaded on demand:
 - **MCP tool descriptions**, which the model reads when it considers a tool
 - **MCP prompts**, exposed by this server as `recall_context`,
   `checkpoint_session`, `capture_artifacts` and `manage_lists`
-- **MCP resources**, at `personal-context://guide/<skill-name>`, which serve
+- **MCP resources**, at `personal-context-mcp://guide/<skill-name>`, which serve
   the full text of each skill to clients that have no skills mechanism
 
 A provider with no skills support is not left worse off: the same guidance is

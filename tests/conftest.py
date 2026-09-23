@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from personal_context.config import Settings
+from personal_context_mcp.config import Settings
 
 TEST_DB_ENV = "PC_TEST_DATABASE_URL"
 
@@ -69,8 +69,8 @@ def settings(tmp_path: Path) -> Settings:
 @pytest.fixture
 async def db(settings: Settings):
     """A migrated database, wrapped so each test starts from a clean schema."""
-    from personal_context.db.migrate import apply_migrations
-    from personal_context.db.pool import Database
+    from personal_context_mcp.db.migrate import apply_migrations
+    from personal_context_mcp.db.pool import Database
 
     dsn = _test_dsn()
     if dsn is None:
@@ -88,7 +88,7 @@ async def db(settings: Settings):
 
 @pytest.fixture
 async def services(settings: Settings, db):
-    from personal_context.services import build_services, set_services
+    from personal_context_mcp.services import build_services, set_services
 
     built = await build_services(settings, db)
     set_services(built)
@@ -119,7 +119,7 @@ async def live_server(settings):
 
     import uvicorn
 
-    from personal_context.server import create_app
+    from personal_context_mcp.server import create_app
 
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))

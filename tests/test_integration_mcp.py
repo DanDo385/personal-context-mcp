@@ -161,7 +161,7 @@ async def test_status_resource_reports_counts_not_content(mcp_client) -> None:
     import json
 
     await mcp_client.call_tool("memory_save", {"content": "A private thought."})
-    contents = await mcp_client.read_resource("personal-context://status")
+    contents = await mcp_client.read_resource("personal-context-mcp://status")
     payload = json.loads(contents[0].text)
 
     assert payload["memories"] == 1
@@ -170,7 +170,7 @@ async def test_status_resource_reports_counts_not_content(mcp_client) -> None:
 
 
 async def test_skill_guides_are_served_as_resources(mcp_client) -> None:
-    contents = await mcp_client.read_resource("personal-context://guide/recall-context")
+    contents = await mcp_client.read_resource("personal-context-mcp://guide/recall-context")
     assert "Recall context" in contents[0].text
 
 
@@ -185,7 +185,7 @@ async def test_guide_resource_refuses_path_traversal(mcp_client) -> None:
 
     try:
         contents = await mcp_client.read_resource(
-            "personal-context://guide/..%2F..%2F..%2Fetc%2Fpasswd"
+            "personal-context-mcp://guide/..%2F..%2F..%2Fetc%2Fpasswd"
         )
     except MCPError:
         return

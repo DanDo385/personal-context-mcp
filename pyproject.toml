@@ -25,7 +25,7 @@ worker = [
 ]
 
 [project.scripts]
-personal-context = "personal_context.cli:main"
+personal-context-mcp = "personal_context_mcp.cli:main"
 obsidian-sync = "obsidian_sync.cli:main"
 
 [dependency-groups]
@@ -44,7 +44,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = "src"
-module-name = ["personal_context", "obsidian_sync"]
+module-name = ["personal_context_mcp", "obsidian_sync"]
 
 [tool.ruff]
 line-length = 100
@@ -61,7 +61,7 @@ ignore = ["E501", "B008", "RUF012", "S101"]
 # MCP tool signatures use `= []` for optional list parameters because that is
 # what produces a clean JSON schema for the calling model. Pydantic validates
 # and copies each call's arguments, so the default is never mutated.
-"src/personal_context/mcp/*" = ["B006"]
+"src/personal_context_mcp/mcp/*" = ["B006"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -70,7 +70,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.mypy]
 python_version = "3.12"
-packages = ["personal_context", "obsidian_sync"]
+packages = ["personal_context_mcp", "obsidian_sync"]
 mypy_path = "src"
 warn_unused_configs = true
 disallow_untyped_defs = false

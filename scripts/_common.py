@@ -1,7 +1,7 @@
 """Shared entry point for the per-provider import scripts.
 
 These exist because the brief asked for them by name; they are one-line
-wrappers over `personal-context import <provider> <archive>`, which is the
+wrappers over `personal-context-mcp import <provider> <archive>`, which is the
 supported interface and the one that gets the argument parsing, the report
 and the limitation notes.
 """
@@ -23,11 +23,11 @@ def run_import(provider: str) -> int:
     parser.add_argument("--no-store-archive", action="store_true")
     args = parser.parse_args()
 
-    from personal_context.config import get_settings
-    from personal_context.db.pool import Database, set_database
-    from personal_context.importers.runner import ImportRunner
-    from personal_context.logging_setup import configure_logging
-    from personal_context.services import build_services, set_services
+    from personal_context_mcp.config import get_settings
+    from personal_context_mcp.db.pool import Database, set_database
+    from personal_context_mcp.importers.runner import ImportRunner
+    from personal_context_mcp.logging_setup import configure_logging
+    from personal_context_mcp.services import build_services, set_services
 
     settings = get_settings()
     configure_logging(settings.log_level)

@@ -6,7 +6,7 @@ Requires PC_TEST_DATABASE_URL pointing at a throwaway Postgres with pgvector.
 from __future__ import annotations
 
 from conftest import requires_db
-from personal_context.models import (
+from personal_context_mcp.models import (
     CheckpointDecision,
     CheckpointFact,
     CheckpointListUpdate,
@@ -180,7 +180,7 @@ async def test_move_onto_a_duplicate_collapses_instead_of_duplicating(services) 
 
 
 async def _checkpoint(services, **kwargs):
-    from personal_context.auth.principal import Principal
+    from personal_context_mcp.auth.principal import Principal
 
     defaults = {
         "provider": "claude",
@@ -262,7 +262,7 @@ async def test_checkpoint_warns_when_it_invents_a_list(services) -> None:
 
 
 async def test_checkpoint_refuses_to_attach_an_artifact_without_an_id(services) -> None:
-    from personal_context.models import CheckpointArtifactRef
+    from personal_context_mcp.models import CheckpointArtifactRef
 
     result = await _checkpoint(services, artifacts=[CheckpointArtifactRef(title="A chart I made")])
     assert result.skipped.get("artifacts") == 1

@@ -160,7 +160,7 @@ CREATE INDEX IF NOT EXISTS audit_log_tool_idx ON audit_log (tool, created_at DES
 -- ------------------------------------------------------------- oauth kv store
 -- FastMCP's OAuth layer needs durable storage for client registrations and
 -- encrypted upstream tokens. On Cloud Run the filesystem is ephemeral, so we
--- back it with Postgres (see personal_context/auth/kv.py).
+-- back it with Postgres (see personal_context_mcp/auth/kv.py).
 
 CREATE TABLE IF NOT EXISTS oauth_kv (
     collection  TEXT NOT NULL,

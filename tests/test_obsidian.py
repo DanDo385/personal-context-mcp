@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from obsidian_sync.vault import Vault, note_id_of, parse_list_items
-from personal_context.errors import PathSecurityError
-from personal_context.obsidian.render import item_marker, render_list, render_note
-from personal_context.util import sha256_bytes
+from personal_context_mcp.errors import PathSecurityError
+from personal_context_mcp.obsidian.render import item_marker, render_list, render_note
+from personal_context_mcp.util import sha256_bytes
 
 ROOTS = {"inbox": "00-Inbox", "project": "20-Projects", "resource": "60-Resources"}
 

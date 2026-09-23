@@ -12,8 +12,8 @@ from typing import Any
 import httpx
 import pytest
 
-from personal_context.config import Settings
-from personal_context.server import create_app
+from personal_context_mcp.config import Settings
+from personal_context_mcp.server import create_app
 
 #: Strings that must never appear in an unauthenticated response body.
 FORBIDDEN_MARKERS = (
@@ -64,7 +64,7 @@ async def test_root_reveals_only_service_identity(client) -> None:
     response = await http_client.get("/")
     assert response.status_code == 200
     body = response.json()
-    assert body["service"] == "personal-context"
+    assert body["service"] == "personal-context-mcp"
     assert body["authorization"] == "required"
     # It names the endpoint - which is not a secret - and nothing else.
     assert set(body) == {"service", "mcp_endpoint", "authorization", "documentation"}
