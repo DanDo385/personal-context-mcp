@@ -1,171 +1,55 @@
-# Deploying personal-context-mcp
+# Deploy scripts
 
-Production runs on **Vercel** at **`https://context.magro.dev`**, with its own
-**Supabase** project, and authenticates with **Google OAuth using a client that
-belongs to this project alone**. Every secret lives in one 1Password item,
-`Dev / Personal Context MCP`. The files in this directory contain only
-`op://` references and are resolved at run time by `op run`.
+Helpers for putting the server online and keeping the Obsidian helper running. New here? Follow
+[guide 5](../docs/guides/05-put-it-online.md) instead; it uses these scripts step by step.
 
-| File | Used by |
+| File | What it does |
 | --- | --- |
-| `production.env.op` | `vercel-env.sh`, which pushes it to Vercel's production environment |
-| `admin.env.op` | commands run from the Mac against production: `migrate`, `check`, `import`, `reclassify`, `review` |
-| `worker.env.op` | the Obsidian sync LaunchAgent |
-| `preflight.sh` | refuses to continue while any field in the 1Password item is still `REPLACE_ME` |
-| `install-worker.sh`, `obsidian-sync.plist` | installs the Obsidian worker as a LaunchAgent |
+| `vercel-env.sh [FILE]` | Copies settings into Vercel's Production environment, one value at a time over stdin, marking secrets *sensitive*. `FILE` is a plain `.env`-style file, or an `op://` reference file resolved with the 1Password CLI. Default: `deploy/production.env.op` if present, else `.env.production`. Skips `OBSIDIAN_SYNC_*`. |
+| `preflight.sh` | 1Password users: fails if any field of your deployment's item is empty or `REPLACE_ME`. Needs `PC_OP_ITEM` (and `PC_OP_VAULT`) in `deploy/local.env`; otherwise it's skipped. |
+| `install-worker.sh` | macOS: installs the Obsidian helper as a LaunchAgent (starts at login, restarts on failure). Reads `deploy/worker.env.op` through `op run` if present, else `.env`. |
+| `obsidian-sync.plist` | The LaunchAgent template `install-worker.sh` fills in. |
+| `*.env.op.example` | Templates of `op://` reference files: `production` (what Vercel gets), `admin` (commands you run against production), `worker` (the Obsidian helper). Copy to the name without `.example`; the copies are Git-ignored. |
+| `local.env` *(yours, Git-ignored)* | Personal defaults for the scripts. See below. |
 
-## Why nothing is shared with phone-demo
+## `deploy/local.env`
 
-`Dev / Supabase` (project `vwanrsxhwpoviasasvoa`) and
-`Dev / Google OAuth Client Secret` (client `675437678581-…`) belong to other
-work. `~/Code/phone-demo/.env.op` references the Google client, along with a
-Calendar refresh token and a Workspace group calendar.
-
-Reusing either would couple two unrelated systems:
-
-- a leaked phone-demo secret would open this server
-- rotating one would break the other
-- a client configured as *Internal* to the magro.dev Workspace, or in
-  *Testing* without djm385@gmail.com as a test user, would refuse
-  djm385@gmail.com outright
-
-Who may use this server is decided by `PC_ALLOWED_SUBJECTS=djm385@gmail.com`,
-the account you choose in the Google sign-in popup. It does not depend on which
-account owns the OAuth client, but creating the client under djm385@gmail.com
-keeps ownership and access in the same place.
-
-## One-time manual steps
-
-### 1. Google Cloud project and OAuth client (signed in as djm385@gmail.com)
-
-1. <https://console.cloud.google.com/projectcreate>. Name it `personal-context-mcp`.
-   Billing is not needed.
-2. **Google Auth Platform → Branding**:
-   - App name: `Personal Context`
-   - Support and developer email: djm385@gmail.com
-3. **Audience**: choose **External**, then **Publish app**.
-   - Only the non-sensitive `openid` and `email` scopes are requested, so
-     publishing needs no Google verification.
-   - Staying in *Testing* expires sign-ins after 7 days, which would force
-     every connector to re-authenticate weekly.
-4. **Data access**: add the scopes `openid`, `.../auth/userinfo.email`,
-   `.../auth/userinfo.profile`.
-5. **Clients → Create client → Web application**:
-   - Name: `personal-context-mcp`
-   - Authorised redirect URI: `https://context.magro.dev/auth/callback`
-6. Copy these into 1Password `Personal Context MCP → Google OAuth`:
-   - `google_client_id`
-   - `google_client_secret`
-   - `gcp_project`, the project ID
-
-### 2. Supabase project
-
-1. <https://supabase.com/dashboard/new>. Name it `personal-context-mcp`, pick
-   the region nearest you and generate a database password. The free plan allows
-   two active projects; pause an unused one if you hit the limit.
-2. **Connect** (top bar), with the password substituted in:
-   - **Transaction pooler** URI (port 6543) → `database_url_pooler`
-   - **Session pooler** URI (port 5432) → `database_url_session`
-3. **Project Settings → API Keys**:
-   - the `service_role` (secret) key → `supabase_service_key`
-   - the project URL → `supabase_url`
-   - the ref → `supabase_project_ref`
-
-`pgvector` is enabled by migration `0001`. The private storage buckets are
-created by `personal-context-mcp check`.
-
-### 3. DNS (Cloudflare, zone magro.dev)
-
-Add `CNAME context → cname.vercel-dns.com` with **Proxy status: DNS only** (grey
-cloud). Cloudflare's proxy would terminate TLS itself and buffer the MCP
-streaming responses.
-
-## Everything after that is scripted
+Optional. Sourced by every script; holds names and references, never secrets.
 
 ```bash
-deploy/preflight.sh                                                          # all fields filled?
-op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp migrate
-op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp check   # also creates buckets
-deploy/vercel-env.sh                                                         # push env to Vercel
-vercel deploy --prod --token "$(op read 'op://Dev/ej3urbcbpu6ks5lxjm2twbdd6e/credential')"
-curl -s https://context.magro.dev/healthz
-deploy/install-worker.sh                                                     # Obsidian worker
+PC_OP_VAULT=Private                          # vault holding your deployment's item
+PC_OP_ITEM=abcdefghijklmnopqrstuvwxyz        # the item's id (op item get "<title>" --format json)
+PC_VERCEL_PROJECT=personal-context-mcp       # Vercel project name
+VERCEL_TOKEN_REF="op://Private/<vercel-token-item-id>/credential"   # optional; else `vercel login`
+WORKER_ENV_FILE=deploy/worker.env.op         # optional; else auto-detected
+WORKER_LABEL=com.personal-context-mcp.obsidian-sync
+VAULT="$HOME/Obsidian/Personal Context"      # folder install-worker.sh creates
 ```
 
-Then add `https://context.magro.dev/mcp` as a custom connector in each app
-(`instructions/<provider>.md`), and choose **djm385@gmail.com** in the Google
-popup.
+## The 1Password item layout the templates expect
 
-## Why a subdomain and not magro.dev/personal-context-mcp
+One item (any title; referenced by id) with three sections:
 
-MCP clients discover OAuth from `/.well-known/oauth-protected-resource` and
-`/.well-known/oauth-authorization-server` at the **host root**. On `magro.dev`
-the portfolio site owns the root, so those requests would never reach this
-server. A subdomain gives the server its own root.
+| Section | Fields |
+| --- | --- |
+| `Server` | `base_url`, `worker_api_key`, `oauth_signing_key` |
+| `Google OAuth` | `google_client_id`, `google_client_secret`, `gcp_project` |
+| `Supabase` | `supabase_project_ref`, `supabase_url`, `supabase_service_key`, `database_url_pooler`, `database_url_session` |
 
-## Why the endpoint is public and the repository private
+plus separate items for the TypeSafe and Anthropic API keys (field `credential`). Generate the two
+`Server` secrets with `openssl rand -hex 32`.
 
-The repository is private. The endpoint has to be reachable from the internet,
-because ChatGPT, Claude, Gemini and Grok call it from their own clouds. It is
-protected by:
-
-- Google OAuth
-- the one-account allowlist
-- per-client scopes
-- rate limiting
-
-Vercel Deployment Protection must stay **off for the production domain**,
-because a Vercel login wall would block the AI providers as well.
-
-## Historical backfill runbook
-
-Everything runs from this Mac against production through `deploy/admin.env.op`.
-Alias it for convenience:
+## Typical sequence
 
 ```bash
-alias pcm='op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp'
+deploy/preflight.sh                                                         # 1Password users
+op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp migrate  # or: uv run ... migrate
+deploy/vercel-env.sh                                                        # or: deploy/vercel-env.sh .env
+vercel deploy --prod
+curl -s https://<your-address>/healthz                                      # -> ok
+deploy/install-worker.sh
 ```
 
-1. **Trial import.** Raw conversations are always kept. Pass 1 (Jev) classifies
-   each one from a short excerpt after the local sensitivity screen.
-   ```bash
-   pcm import claude exports/claude.zip --limit 50
-   pcm review                       # inspect what landed in the review queue
-   ```
-2. **Full import**, per provider: `pcm import chatgpt exports/chatgpt.zip`, and
-   so on. Safe to re-run.
-3. **Pass 2, deep extraction.** Claude (`PC_EXTRACTION_MODEL`, default
-   `claude-opus-5-5`) reads the full transcripts Jev marked `deep_extraction`.
-   Always look at the estimate first:
-   ```bash
-   pcm extract --dry-run --limit 500
-   pcm extract --limit 50
-   ```
-4. **After changing questions or projects**, redo pass 1 from stored messages.
-   No export archive is needed:
-   ```bash
-   pcm reclassify-conversations --dry-run
-   pcm reclassify-conversations --limit 1000
-   ```
-
-5. **Build the wiki graph.** Python finds candidates, title mentions link
-   directly, Jev judges the rest, Postgres stores the graph, and the worker
-   renders it into the vault:
-   ```bash
-   pcm wiki seed-mocs --min-mentions 3     # maps from topics extraction found repeatedly
-   pcm wiki add-moc "MCP" --description "Model Context Protocol"
-   pcm wiki links --limit 500              # note links
-   pcm wiki mocs --limit 500               # map membership and section
-   pcm wiki render                         # queue changed notes and maps for the vault
-   pcm wiki doctor                         # orphans, empty maps, pending reviews
-   pcm review                              # links and memberships in the review band
-   ```
-   The thresholds are in `classifier/questions.py` (`WIKI_LINK_*`, `MOC_*`).
-   Start conservative, review a sample, then tune.
-
-Privacy knobs, all in `admin.env.op`:
-
-- `PC_IMPORT_DEFAULT_SENSITIVITY`: the floor for every imported conversation.
-- `PC_NO_EXTERNAL_SENSITIVITY`: which levels never leave the Mac, for both Jev
-  and extraction. Add `private` to keep health, legal and finance conversations
-  local as well.
+Vercel builds the app from `vercel.json` (framework `python`) and `pyproject.toml`
+(`[tool.vercel] entrypoint = "main:app"`); `.vercelignore` keeps tests, docs and local data out of the
+upload.

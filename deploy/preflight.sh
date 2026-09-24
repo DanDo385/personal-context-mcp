@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Refuse to deploy while any 1Password field this project needs is still a
-# placeholder. Prints field names only, never values.
+# 1Password users only: refuse to deploy while any field of your deployment's
+# 1Password item is empty or still says REPLACE_ME. Prints field names, never
+# values. Set PC_OP_ITEM (and PC_OP_VAULT) in deploy/local.env.
 set -euo pipefail
-# The 1Password item holding this deployment's secrets, referenced by id so
-# renaming it never breaks anything. Override for your own deployment.
-VAULT="${PC_OP_VAULT:-Dev}"
-ITEM="${PC_OP_ITEM:-2c74cf4sfqsj3cey2q6peuhwkq}"
+cd "$(dirname "$0")/.."
+[[ -f deploy/local.env ]] && source deploy/local.env
+VAULT="${PC_OP_VAULT:-Private}"
+ITEM="${PC_OP_ITEM:-}"
+if [[ -z "$ITEM" ]]; then
+  echo "preflight: PC_OP_ITEM is not set in deploy/local.env; skipping the 1Password check."
+  exit 0
+fi
 missing=0
 while IFS=$'\t' read -r section label value; do
   if [[ -z "$value" || "$value" == *REPLACE_ME* ]]; then
@@ -20,7 +25,7 @@ for f in json.load(sys.stdin)["fields"]:
         print(s, f["label"], f.get("value") or "", sep="\t")
 ')
 if [[ $missing -ne 0 ]]; then
-  echo "Fill these in the 1Password item (see deploy/README.md), then re-run." >&2
+  echo "Fill these in the 1Password item, then re-run." >&2
   exit 1
 fi
 echo "1Password item complete."

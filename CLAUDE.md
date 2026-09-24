@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation is part of every change
+
+This is meant to be a popular open-source project used by non-programmers. `README.md` is the
+friendly front door; `docs/guides/00`-`10` are the step-by-step setup path, written for someone who
+has barely used a terminal (what to type, what success looks like, what to do when it fails). Any
+user-facing change updates the relevant guide, `docs/troubleshooting.md` for new error messages, and
+`.env.example` for new settings. Keep personal deployment values (domains, emails, 1Password item
+ids) out of committed docs and templates; they live in Git-ignored `deploy/local.env` and
+`deploy/*.env.op`. `personal-context-mcp init` (`setup_wizard.py`) is the supported way to create a
+`.env`.
+
 ## Commands
 
 ```bash
@@ -50,7 +61,7 @@ Numbered SQL in `migrations/`, applied once inside a transaction and recorded wi
 
 An MCP server (FastMCP mounted in Starlette) that is shared, provider-neutral memory for ChatGPT,
 Claude, Gemini and Grok. Postgres+pgvector is canonical structured state, object storage holds
-artifact bytes, Obsidian is a rendered human layer. `README.md` is the long-form design document;
+artifact bytes, Obsidian is a rendered human layer. `docs/architecture.md` is the long-form design document;
 the points below are the ones that span files.
 
 **Request path.** `server.py` builds the FastMCP server (auth provider, rate-limit middleware,
@@ -127,8 +138,10 @@ Links and maps render into a marked generated block at note-render time (`obsidi
 and `extract_note_body` strips that block, the frontmatter and the title from human edits before
 they are stored. Keep both halves in step.
 
-**Deployment** is Vercel (`main.py` → `personal_context_mcp.asgi:app`) at `context.magro.dev`; see
-`deploy/README.md`. Secrets are `op://` references resolved by `op run`, never files.
+**Deployment** is Vercel (`vercel.json` framework `python`; `main.py` → `personal_context_mcp.asgi:app`);
+see `docs/guides/05-put-it-online.md` and `deploy/README.md`. The maintainer's own values live in
+Git-ignored `deploy/local.env` and `deploy/*.env.op`, and `.1password/project.toml` routes local runs
+to their 1Password Environment (`project-env`).
 
 ### Consumers outside `src/`
 

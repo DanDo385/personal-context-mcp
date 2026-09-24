@@ -20,3 +20,5 @@ Dockerfile
 CLAUDE.md
 CONTRIBUTING.md
 _uv/
+docs/
+.1password/
