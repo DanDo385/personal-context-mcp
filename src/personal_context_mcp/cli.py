@@ -19,6 +19,11 @@ import click
 from personal_context_mcp.config import Settings, get_settings
 from personal_context_mcp.db.migrate import apply_migrations, migration_status
 from personal_context_mcp.db.pool import Database, set_database
+from personal_context_mcp.extraction.deep import (
+    DeepExtractor,
+    estimate_cost,
+    extraction_candidates,
+)
 from personal_context_mcp.importers.adapters import IMPORTERS
 from personal_context_mcp.importers.reclassify import (
     reclassify_conversations,
@@ -336,6 +341,60 @@ def reclassify_conversations_cmd(
                 services, ids, concurrency=concurrency, use_cache=not no_cache
             )
             click.echo(json.dumps(summarise(report), indent=2))
+        finally:
+            await services.aclose()
+            set_services(None)
+
+    asyncio.run(run())
+
+
+@main.command()
+@click.option("--limit", type=int, default=25, show_default=True)
+@click.option(
+    "--min-importance",
+    type=float,
+    default=0.5,
+    show_default=True,
+    help="Pass-1 importance (0-1) below which a conversation is skipped.",
+)
+@click.option("--redo", is_flag=True, help="Also redo conversations already extracted.")
+@click.option("--concurrency", type=int, default=None, help="Default: PC_EXTRACTION_CONCURRENCY.")
+@click.option("--dry-run", is_flag=True, help="Show what would run and its estimated cost.")
+def extract(
+    limit: int, min_importance: float, redo: bool, concurrency: int | None, dry_run: bool
+) -> None:
+    """Pass 2: a frontier model reads conversations Jev marked for deep extraction.
+
+    Results are written through session_checkpoint, so they are idempotent and
+    routed like any live session. Conversations whose sensitivity is in
+    PC_NO_EXTERNAL_SENSITIVITY are never sent. Start with --dry-run.
+    """
+    settings = get_settings()
+    configure_logging(settings.log_level)
+
+    async def run() -> None:
+        services = await _with_services(settings)
+        try:
+            candidates = await extraction_candidates(
+                services, limit=limit, min_importance=min_importance, redo=redo
+            )
+            click.echo(json.dumps(estimate_cost(candidates, settings), indent=2))
+            if dry_run or not candidates:
+                for c in candidates[:20]:
+                    click.echo(f"  {c.importance or 0:.2f}  {c.chars:>8} chars  {c.title}")
+                return
+            if settings.extraction_provider != "anthropic":
+                raise click.ClickException(
+                    "Set PC_EXTRACTION_PROVIDER=anthropic and PC_ANTHROPIC_API_KEY to run."
+                )
+            extractor = DeepExtractor(services)
+            try:
+                report = await extractor.run(
+                    [c.conversation_id for c in candidates], concurrency=concurrency
+                )
+            finally:
+                await extractor.aclose()
+            click.echo(json.dumps(report.as_dict(), indent=2))
         finally:
             await services.aclose()
             set_services(None)

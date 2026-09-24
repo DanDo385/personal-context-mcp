@@ -116,3 +116,41 @@ protected by:
 
 Vercel Deployment Protection must stay **off for the production domain**,
 because a Vercel login wall would block the AI providers as well.
+
+## Historical backfill runbook
+
+Everything runs from this Mac against production through `deploy/admin.env.op`.
+Alias it for convenience:
+
+```bash
+alias pcm='op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp'
+```
+
+1. **Trial import.** Raw conversations are always kept. Pass 1 (Jev) classifies
+   each one from a short excerpt after the local sensitivity screen.
+   ```bash
+   pcm import claude exports/claude.zip --limit 50
+   pcm review                       # inspect what landed in the review queue
+   ```
+2. **Full import**, per provider: `pcm import chatgpt exports/chatgpt.zip`, and
+   so on. Safe to re-run.
+3. **Pass 2, deep extraction.** Claude (`PC_EXTRACTION_MODEL`, default
+   `claude-opus-5-5`) reads the full transcripts Jev marked `deep_extraction`.
+   Always look at the estimate first:
+   ```bash
+   pcm extract --dry-run --limit 500
+   pcm extract --limit 50
+   ```
+4. **After changing questions or projects**, redo pass 1 from stored messages.
+   No export archive is needed:
+   ```bash
+   pcm reclassify-conversations --dry-run
+   pcm reclassify-conversations --limit 1000
+   ```
+
+Privacy knobs, all in `admin.env.op`:
+
+- `PC_IMPORT_DEFAULT_SENSITIVITY`: the floor for every imported conversation.
+- `PC_NO_EXTERNAL_SENSITIVITY`: which levels never leave the Mac, for both Jev
+  and extraction. Add `private` to keep health, legal and finance conversations
+  local as well.

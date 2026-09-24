@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     #: transcript of conversations Jev marked for deep extraction.
     extraction_provider: Literal["anthropic", "none"] = "none"
     anthropic_api_key: SecretStr = SecretStr("")
-    extraction_model: str = "claude-sonnet-5"
+    extraction_model: str = "claude-opus-5-5"
     extraction_max_transcript_chars: int = 120_000
     extraction_concurrency: int = 3
 
