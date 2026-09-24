@@ -87,7 +87,7 @@ deploy/preflight.sh                                                          # a
 op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp migrate
 op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp check   # also creates buckets
 deploy/vercel-env.sh                                                         # push env to Vercel
-vercel deploy --prod --token "$(op read 'op://Dev/Vercel Token/credential')"
+vercel deploy --prod --token "$(op read 'op://Dev/ej3urbcbpu6ks5lxjm2twbdd6e/credential')"
 curl -s https://context.magro.dev/healthz
 deploy/install-worker.sh                                                     # Obsidian worker
 ```

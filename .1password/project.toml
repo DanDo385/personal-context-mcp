@@ -1,0 +1,34 @@
+# 1Password routing for this repo. Safe to commit: contains no secret values.
+# Agents: use THIS Environment for local dev. Production secrets are pushed to Vercel by
+# deploy/vercel-env.sh from deploy/production.env.op (unchanged).
+project = "personal-context-mcp"
+environment_name = "personal-context-mcp-dev"
+environment_id = "dp42b74jlt4f4ox77ier6epcim"
+account = "my.1password.com"
+vault = "Dev"
+run = "uv run personal-context-mcp"
+
+google_account = "djm385@gmail.com"   # OAuth client not created yet (Personal Context MCP > Google OAuth = REPLACE_ME)
+providers = ["supabase", "google", "typesafe", "anthropic", "vercel"]
+
+# Mirrors deploy/admin.env.op (PC_ENVIRONMENT=dev). Sources that are still REPLACE_ME in the vault
+# (Supabase URL/keys, Google OAuth) resolve to placeholders and are skipped as pending until filled.
+[variables]
+PROJECT_NAME = "personal-context-mcp"
+APP_ENV = "development"
+PC_ENVIRONMENT = "dev"
+PC_AUTH_MODE = "none"
+PC_STORAGE_BACKEND = "supabase"
+PC_SUPABASE_BUCKET = "personal-context-mcp"
+PC_SUPABASE_ARCHIVE_BUCKET = "personal-context-mcp-archives"
+PC_CLASSIFIER = "jev"
+PC_EMBEDDING_PROVIDER = "none"
+PC_EXTRACTION_PROVIDER = "anthropic"
+PC_EXTRACTION_MODEL = "claude-opus-5-5"
+PC_BASE_URL = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Server/base_url"
+PC_WORKER_API_KEY = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Server/worker_api_key"
+PC_TYPESAFE_API_KEY = "op://Dev/7xs4ck6u2lngsck2qm5skfj22i/credential"
+PC_ANTHROPIC_API_KEY = "op://Dev/e6vnwwousfa35l32gdwindqjke/credential"
+PC_DATABASE_URL = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/database_url_session"
+PC_SUPABASE_URL = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/supabase_url"
+PC_SUPABASE_SERVICE_KEY = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/supabase_service_key"

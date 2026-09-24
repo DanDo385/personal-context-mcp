@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 PROJECT=personal-context-mcp
 deploy/preflight.sh
 
-export VERCEL_TOKEN="${VERCEL_TOKEN:-$(op read 'op://Dev/Vercel Token/credential')}"
+export VERCEL_TOKEN="${VERCEL_TOKEN:-$(op read 'op://Dev/ej3urbcbpu6ks5lxjm2twbdd6e/credential')}"
 op run --env-file=deploy/production.env.op -- python3 - "$PROJECT" <<'PY'
 import os, re, subprocess, sys
 project = sys.argv[1]
