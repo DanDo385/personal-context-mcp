@@ -26,7 +26,7 @@ from typing import Any
 
 from typesafe_sdk import Choice, Noul, Score
 
-QUESTIONS_VERSION = "2026-09-21.1"
+QUESTIONS_VERSION = "2026-09-24.1"
 
 #: Offered whenever a Choice ranges over projects, so "none of these" is
 #: always reachable.
@@ -153,6 +153,15 @@ def checkpoint_questions(project_candidates: dict[str, str]) -> dict[str, Any]:
                 "security-sensitive material that the person would not want "
                 "copied into a synced notes vault or sent to a third-party API "
                 "without being asked first."
+            )
+        ),
+        "deep_extraction": Noul(
+            instructions=(
+                "Reading the complete transcript closely would yield decisions, "
+                "durable facts, tasks, or reusable technical or research findings "
+                "that the state shown here does not already capture. Answer no "
+                "for small talk, one-off lookups and questions resolved in the "
+                "moment, however long the transcript is."
             )
         ),
         "destination": Choice(

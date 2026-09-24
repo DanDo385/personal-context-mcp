@@ -20,6 +20,11 @@ from personal_context_mcp.config import Settings, get_settings
 from personal_context_mcp.db.migrate import apply_migrations, migration_status
 from personal_context_mcp.db.pool import Database, set_database
 from personal_context_mcp.importers.adapters import IMPORTERS
+from personal_context_mcp.importers.reclassify import (
+    reclassify_conversations,
+    stale_conversations,
+    summarise,
+)
 from personal_context_mcp.importers.runner import ImportRunner
 from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.services import build_services, set_services
@@ -165,13 +170,24 @@ def check() -> None:
     "--limit", type=int, default=None, help="Stop after N conversations (for a trial run)."
 )
 @click.option("--no-store-archive", is_flag=True, help="Do not copy the export to cold storage.")
-def import_export(provider: str, archive: Path, limit: int | None, no_store_archive: bool) -> None:
+@click.option(
+    "--concurrency", type=int, default=None, help="Conversations at once (PC_IMPORT_CONCURRENCY)."
+)
+def import_export(
+    provider: str,
+    archive: Path,
+    limit: int | None,
+    no_store_archive: bool,
+    concurrency: int | None,
+) -> None:
     """Import a provider export archive.
 
     Safe to re-run: conversations are keyed on their provider ids and
     attachments on their SHA-256, so nothing is duplicated.
     """
     settings = get_settings()
+    if concurrency is not None:
+        settings.import_concurrency = concurrency
     configure_logging(settings.log_level)
 
     async def run() -> None:
@@ -227,9 +243,24 @@ def reclassify(limit: int) -> None:
 
             done = 0
             for row in rows:
+                if row["object_type"] == "checkpoint":
+                    # Imported conversations are redone from their stored
+                    # messages. A live checkpoint's state was never stored,
+                    # so only imported conversations qualify.
+                    imported = await services.db.fetchval(
+                        "SELECT imported FROM conversations WHERE id = $1", row["object_id"]
+                    )
+                    if not imported:
+                        continue
+                    report = await reclassify_conversations(services, [row["object_id"]])
+                    if not report.errors:
+                        await services.db.execute(
+                            "DELETE FROM reclassification_queue WHERE object_id = $1",
+                            row["object_id"],
+                        )
+                        done += 1
+                    continue
                 if row["object_type"] != "artifact":
-                    # Conversations are reclassified through the checkpoint
-                    # path; only artifacts can be redone from stored state.
                     continue
                 record = await services.artifacts.get(row["object_id"])
                 if record is None:
@@ -255,6 +286,56 @@ def reclassify(limit: int) -> None:
                     )
                     done += 1
             click.echo(f"Reclassified {done} of {len(rows)} queued objects.")
+        finally:
+            await services.aclose()
+            set_services(None)
+
+    asyncio.run(run())
+
+
+@main.command(name="reclassify-conversations")
+@click.option("--limit", type=int, default=200, show_default=True)
+@click.option("--provider", type=click.Choice(sorted(IMPORTERS)), default=None)
+@click.option(
+    "--all",
+    "include_current",
+    is_flag=True,
+    help="Also redo conversations already classified under the current question set.",
+)
+@click.option("--no-cache", is_flag=True, help="Ask Jev again even for identical input.")
+@click.option("--concurrency", type=int, default=None, help="Default: PC_IMPORT_CONCURRENCY.")
+@click.option("--dry-run", is_flag=True, help="Only count what would be reclassified.")
+def reclassify_conversations_cmd(
+    limit: int,
+    provider: str | None,
+    include_current: bool,
+    no_cache: bool,
+    concurrency: int | None,
+    dry_run: bool,
+) -> None:
+    """Re-run pass-1 classification over imported conversations.
+
+    By default only conversations with no usable result under the current
+    question set: never classified, classified by an older QUESTIONS_VERSION,
+    or classified while Jev was unavailable. Works from stored messages; the
+    export archive is not needed again.
+    """
+    settings = get_settings()
+    configure_logging(settings.log_level)
+
+    async def run() -> None:
+        services = await _with_services(settings)
+        try:
+            ids = await stale_conversations(
+                services, limit=limit, provider=provider, include_current=include_current
+            )
+            click.echo(f"{len(ids)} conversation(s) to reclassify.")
+            if dry_run or not ids:
+                return
+            report = await reclassify_conversations(
+                services, ids, concurrency=concurrency, use_cache=not no_cache
+            )
+            click.echo(json.dumps(summarise(report), indent=2))
         finally:
             await services.aclose()
             set_services(None)

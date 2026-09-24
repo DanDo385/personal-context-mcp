@@ -78,6 +78,19 @@ class ClassificationResult:
         return {key: answer.as_json() for key, answer in self.answers.items()}
 
 
+def answers_from_json(data: dict[str, Any]) -> dict[str, Answer]:
+    """Inverse of :meth:`ClassificationResult.answers_json`, for stored events."""
+    return {
+        key: Answer(
+            kind=str(item["type"]),
+            value=item["value"],
+            confidence=item.get("confidence"),
+            probabilities={str(k): float(v) for k, v in (item.get("probabilities") or {}).items()},
+        )
+        for key, item in data.items()
+    }
+
+
 @runtime_checkable
 class Classifier(Protocol):
     name: str

@@ -61,6 +61,8 @@ class Routing:
     review_reasons: list[str]
     action_taken: str
     confidence: float
+    #: Pass-1 triage: whether a frontier model should read the full transcript.
+    deep_extract: Verdict = Verdict.UNSURE
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -78,6 +80,7 @@ class Routing:
             "review_reasons": self.review_reasons,
             "action_taken": self.action_taken,
             "confidence": round(self.confidence, 3),
+            "deep_extract": self.deep_extract.value,
         }
 
 
@@ -145,6 +148,7 @@ class PolicyEngine:
         creates_task = self.verdict(result.noul("creates_task", 0.0))
         sensitive = self.verdict(result.noul("sensitive", 0.0))
         explicit_review = self.verdict(result.noul("needs_human_review", 0.0))
+        deep_extract = self.verdict(result.noul("deep_extraction", 0.5))
 
         if explicit_review is Verdict.YES:
             review_reasons.append("classifier_requested_review")
@@ -193,6 +197,7 @@ class PolicyEngine:
             review_reasons=sorted(set(review_reasons)),
             action_taken=action,
             confidence=confidence,
+            deep_extract=deep_extract,
         )
 
     def artifact_project(self, result: ClassificationResult) -> tuple[str | None, Band]:

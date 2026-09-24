@@ -8,14 +8,22 @@ whether the classifications were any good.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
-from personal_context_mcp.classifier.base import ClassificationResult, Classifier
+from personal_context_mcp.classifier.base import (
+    ClassificationResult,
+    Classifier,
+    answers_from_json,
+)
 from personal_context_mcp.classifier.policy import PolicyEngine, Routing
+from personal_context_mcp.classifier.questions import QUESTIONS_VERSION
 from personal_context_mcp.config import Settings
 from personal_context_mcp.db.pool import Database
 from personal_context_mcp.logging_setup import get_logger
+from personal_context_mcp.util import sha256_text
 
 logger = get_logger(__name__)
 
@@ -78,6 +86,7 @@ class ClassificationService:
         *,
         object_type: str,
         object_id: UUID | None,
+        extra: dict[str, Any] | None = None,
     ) -> UUID | None:
         try:
             return await self._db.fetchval(
@@ -102,7 +111,7 @@ class ClassificationService:
                 result.degraded,
                 result.input_tokens,
                 result.duration_ms,
-                {"routing": routing.as_json(), "error": result.error},
+                {"routing": routing.as_json(), "error": result.error, **(extra or {})},
             )
         except Exception:
             logger.exception("failed to persist classification event")
@@ -166,22 +175,97 @@ class ClassificationService:
 
     # --------------------------------------------------------- classify + act
 
+    async def _cached(self, cache_key: str) -> ClassificationResult | None:
+        row = await self._db.fetchrow(
+            """
+            SELECT answers, classifier, model, request_id, questions_version, input_hash
+            FROM classification_events
+            WHERE metadata->>'cache_key' = $1 AND NOT degraded
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            cache_key,
+        )
+        if row is None:
+            return None
+        return ClassificationResult(
+            answers=answers_from_json(row["answers"]),
+            classifier=row["classifier"],
+            model=row["model"],
+            request_id=row["request_id"],
+            questions_version=row["questions_version"],
+            input_hash=row["input_hash"],
+            input_tokens=0,
+            duration_ms=0,
+        )
+
+    def cache_key(self, kind: str, state: dict[str, Any], candidates: dict[str, str]) -> str:
+        """Identity of one question: same state, options, questions and model."""
+        return sha256_text(
+            json.dumps(
+                {
+                    "kind": kind,
+                    "questions": QUESTIONS_VERSION,
+                    "classifier": self._classifier.name,
+                    "model": self._settings.jev_model,
+                    "state": {k: v for k, v in state.items() if k != "input_hash"},
+                    "candidates": candidates,
+                },
+                sort_keys=True,
+                default=str,
+            )
+        )
+
+    async def _classify(
+        self,
+        kind: str,
+        ask: Callable[[dict[str, Any], dict[str, str]], Awaitable[ClassificationResult]],
+        state: dict[str, Any],
+        *,
+        object_id: UUID | None,
+        historical_import: bool,
+        use_cache: bool = True,
+    ) -> tuple[ClassificationResult, Routing, UUID | None]:
+        candidates = await self.project_candidates()
+        # Only Jev answers are worth caching: rules are free and deterministic,
+        # and a degraded or privacy-blocked result must be asked again.
+        cacheable = self._settings.classification_cache and self._classifier.name == "jev"
+        key = self.cache_key(kind, state, candidates) if cacheable else None
+
+        result = await self._cached(key) if key and use_cache else None
+        cache_hit = result is not None
+        if result is None:
+            result = await ask(state, candidates)
+
+        routing = self.policy(historical_import=historical_import).route(result)
+        extra: dict[str, Any] = {}
+        if key and result.classifier == "jev" and not result.degraded:
+            extra = {"cache_key": key, "cache_hit": cache_hit}
+        event_id = await self.record(
+            result, routing, object_type=kind, object_id=object_id, extra=extra
+        )
+        if result.degraded and object_id is not None:
+            await self.queue_reclassification(
+                object_type=kind, object_id=object_id, reason="classifier_degraded"
+            )
+        return result, routing, event_id
+
     async def classify_checkpoint(
         self,
         state: dict[str, Any],
         *,
         object_id: UUID | None = None,
         historical_import: bool = False,
+        use_cache: bool = True,
     ) -> tuple[ClassificationResult, Routing, UUID | None]:
-        candidates = await self.project_candidates()
-        result = await self._classifier.classify_checkpoint(state, candidates)
-        routing = self.policy(historical_import=historical_import).route(result)
-        event_id = await self.record(result, routing, object_type="checkpoint", object_id=object_id)
-        if result.degraded and object_id is not None:
-            await self.queue_reclassification(
-                object_type="checkpoint", object_id=object_id, reason="classifier_degraded"
-            )
-        return result, routing, event_id
+        return await self._classify(
+            "checkpoint",
+            self._classifier.classify_checkpoint,
+            state,
+            object_id=object_id,
+            historical_import=historical_import,
+            use_cache=use_cache,
+        )
 
     async def classify_artifact(
         self,
@@ -189,20 +273,21 @@ class ClassificationService:
         *,
         object_id: UUID | None = None,
         historical_import: bool = False,
+        use_cache: bool = True,
     ) -> tuple[ClassificationResult, Routing, UUID | None]:
-        candidates = await self.project_candidates()
-        result = await self._classifier.classify_artifact(state, candidates)
-        routing = self.policy(historical_import=historical_import).route(result)
-        event_id = await self.record(result, routing, object_type="artifact", object_id=object_id)
-        if result.degraded and object_id is not None:
-            await self.queue_reclassification(
-                object_type="artifact", object_id=object_id, reason="classifier_degraded"
-            )
-        return result, routing, event_id
+        return await self._classify(
+            "artifact",
+            self._classifier.classify_artifact,
+            state,
+            object_id=object_id,
+            historical_import=historical_import,
+            use_cache=use_cache,
+        )
 
     async def classify_note(
         self, state: dict[str, Any], *, object_id: UUID | None = None
     ) -> tuple[ClassificationResult, Routing, UUID | None]:
+        # Notes are human-edited and change often; not worth caching.
         candidates = await self.project_candidates()
         result = await self._classifier.classify_note(state, candidates)
         routing = self.policy().route(result)

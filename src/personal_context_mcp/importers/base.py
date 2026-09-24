@@ -85,6 +85,8 @@ class ImportReport:
     summaries_created: int = 0
     memories_created: int = 0
     reviews_queued: int = 0
+    conversations_screened_sensitive: int = 0
+    deep_extraction_candidates: int = 0
     limitations: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -96,6 +98,7 @@ class ImportReport:
                 "seen": self.conversations_seen,
                 "imported": self.conversations_imported,
                 "skipped_unchanged": self.conversations_skipped,
+                "screened_sensitive": self.conversations_screened_sensitive,
             },
             "messages_imported": self.messages_imported,
             "attachments": {
@@ -105,6 +108,7 @@ class ImportReport:
             "summaries_created": self.summaries_created,
             "memories_created": self.memories_created,
             "reviews_queued": self.reviews_queued,
+            "deep_extraction_candidates": self.deep_extraction_candidates,
             "limitations": self.limitations,
             "errors": self.errors[:50],
         }
