@@ -5,6 +5,7 @@ Helpers for putting the server online and keeping the Obsidian helper running. N
 
 | File | What it does |
 | --- | --- |
+| `go-live.sh [FILE]` | One command from filled-in settings to a verified live server: preflight, migrate, check, push settings, deploy, then confirm `/healthz` says `ok` and an unauthenticated request gets 401. |
 | `vercel-env.sh [FILE]` | Copies settings into Vercel's Production environment, one value at a time over stdin, marking secrets *sensitive*. `FILE` is a plain `.env`-style file, or an `op://` reference file resolved with the 1Password CLI. Default: `deploy/production.env.op` if present, else `.env.production`. Skips `OBSIDIAN_SYNC_*`. |
 | `preflight.sh` | 1Password users: fails if any field of your deployment's item is empty or `REPLACE_ME`. Needs `PC_OP_ITEM` (and `PC_OP_VAULT`) in `deploy/local.env`; otherwise it's skipped. |
 | `install-worker.sh` | macOS: installs the Obsidian helper as a LaunchAgent (starts at login, restarts on failure). Reads `deploy/worker.env.op` through `op run` if present, else `.env`. |
