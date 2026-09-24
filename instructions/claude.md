@@ -49,7 +49,7 @@ claude plugin install typesafe@typesafe-ai
 | --- | --- |
 | Transport | Streamable HTTP |
 | Auth | OAuth 2.1 + PKCE, Dynamic Client Registration |
-| Tools | all 45 |
+| Tools | all 48 |
 | Prompts | supported, surfaced as slash-style commands |
 | Resources | supported |
 | Write approval | Claude asks before the first call to each write tool |

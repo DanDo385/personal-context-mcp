@@ -49,7 +49,7 @@ same context. Workflow guidance reaches Gemini three ways instead:
 | --- | --- |
 | Transport | Streamable HTTP |
 | Auth | OAuth with DCR; manual credentials available as a fallback |
-| Tools | all 45 |
+| Tools | all 48 |
 | Prompts / resources | availability varies; tool descriptions carry the load |
 | Write approval | **Gemini requires manual confirmation for every write action** |
 | Mobile | available after desktop setup |

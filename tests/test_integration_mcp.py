@@ -106,9 +106,7 @@ async def test_checkpoint_then_bootstrap_through_mcp(mcp_client) -> None:
 
 async def test_lists_round_trip_through_mcp(mcp_client) -> None:
     """Acceptance test 2: add from one client, read it back."""
-    await mcp_client.call_tool(
-        "list_create", {"name": "Personal AI tasks", "list_type": "task"}
-    )
+    await mcp_client.call_tool("list_create", {"name": "Personal AI tasks", "list_type": "task"})
     await mcp_client.call_tool(
         "list_add_item",
         {"list": "personal-ai-tasks", "text": "Test Gemini connector on iPhone"},
@@ -137,7 +135,9 @@ async def test_artifact_bundle_through_mcp_reports_capture_honestly(mcp_client) 
     assert artifact["file_count"] == 3
     assert artifact["artifact_type"] == "web_project"
     assert {f["relative_path"] for f in artifact["files"]} == {
-        "index.html", "styles.css", "src/app.js"
+        "index.html",
+        "styles.css",
+        "src/app.js",
     }
 
 
@@ -213,15 +213,11 @@ async def test_read_only_client_sees_only_read_tools(read_only_client) -> None:
 
     assert {"context_bootstrap", "memory_search", "list_search"} <= names
     # Write tools are not merely refused on call - they are not advertised.
-    assert not ({
-        "memory_save", "session_checkpoint", "artifact_save_bundle", "note_write"
-    } & names)
+    assert not ({"memory_save", "session_checkpoint", "artifact_save_bundle", "note_write"} & names)
 
 
 async def test_read_only_client_is_refused_a_write_tool(read_only_client) -> None:
     from fastmcp.exceptions import ToolError
 
     with pytest.raises(ToolError):
-        await read_only_client.call_tool(
-            "memory_save", {"content": "should never be written"}
-        )
+        await read_only_client.call_tool("memory_save", {"content": "should never be written"})

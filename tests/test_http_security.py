@@ -172,4 +172,3 @@ async def test_wrong_path_does_not_disclose_the_right_one(client) -> None:
     response = await http_client.get("/mcp/some-guess")
     assert response.status_code in (401, 403, 404, 405)
     assert "a1b2c3" not in response.text
-

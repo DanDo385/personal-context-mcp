@@ -44,7 +44,7 @@ ways, in descending order of how reliably ChatGPT uses them:
 | --- | --- |
 | Transport | Streamable HTTP and SSE |
 | Auth | OAuth (DCR supported) |
-| Tools | all 45 |
+| Tools | all 48 |
 | Write approval | ChatGPT confirms write actions |
 | Mobile (iOS) | connectors configured on web are available in the app |
 

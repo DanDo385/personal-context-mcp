@@ -36,18 +36,23 @@ async def test_enqueue_validates_the_path(services) -> None:
 async def test_a_newer_job_supersedes_an_open_one_for_the_same_path(services) -> None:
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     first = await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={"v": 1},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={"v": 1},
     )
     second = await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={"v": 2},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={"v": 2},
     )
     assert first != second
 
     statuses = {
-        r["id"]: r["status"]
-        for r in await services.db.fetch("SELECT id, status FROM sync_jobs")
+        r["id"]: r["status"] for r in await services.db.fetch("SELECT id, status FROM sync_jobs")
     }
     assert statuses[first] == "cancelled"
     assert statuses[second] == "approved"
@@ -56,8 +61,11 @@ async def test_a_newer_job_supersedes_an_open_one_for_the_same_path(services) ->
 async def test_lease_is_exclusive(services) -> None:
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={},
     )
 
     first = await services.sync_queue.lease(worker_id="w1")
@@ -69,35 +77,46 @@ async def test_lease_is_exclusive(services) -> None:
 async def test_completing_a_job_records_an_event(services) -> None:
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={},
     )
     job = (await services.sync_queue.lease(worker_id="w1"))[0]
     await services.sync_queue.complete(job["id"], worker_id="w1", written_sha256="abc")
 
-    assert await services.db.fetchval(
-        "SELECT status FROM sync_jobs WHERE id = $1", job["id"]
-    ) == "done"
-    assert await services.db.fetchval(
-        "SELECT count(*) FROM sync_events WHERE sync_job_id = $1 AND event_type = 'acked'",
-        job["id"],
-    ) == 1
+    assert (
+        await services.db.fetchval("SELECT status FROM sync_jobs WHERE id = $1", job["id"])
+        == "done"
+    )
+    assert (
+        await services.db.fetchval(
+            "SELECT count(*) FROM sync_events WHERE sync_job_id = $1 AND event_type = 'acked'",
+            job["id"],
+        )
+        == 1
+    )
 
 
 async def test_a_conflict_is_terminal_not_retried(services) -> None:
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={},
     )
     job = (await services.sync_queue.lease(worker_id="w1"))[0]
     await services.sync_queue.fail(
         job["id"], worker_id="w1", error="file changed on disk", conflict=True
     )
 
-    assert await services.db.fetchval(
-        "SELECT status FROM sync_jobs WHERE id = $1", job["id"]
-    ) == "conflict"
+    assert (
+        await services.db.fetchval("SELECT status FROM sync_jobs WHERE id = $1", job["id"])
+        == "conflict"
+    )
     # A conflict must not be re-leased and overwrite the human's edit.
     assert await services.sync_queue.lease(worker_id="w2") == []
 
@@ -105,8 +124,11 @@ async def test_a_conflict_is_terminal_not_retried(services) -> None:
 async def test_an_ordinary_failure_returns_to_the_queue(services) -> None:
     note_id, _, _ = await services.notes.upsert(title="A note", content="body")
     await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="00-Inbox/a-note.md", payload={},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="00-Inbox/a-note.md",
+        payload={},
     )
     job = (await services.sync_queue.lease(worker_id="w1"))[0]
     await services.sync_queue.fail(job["id"], worker_id="w1", error="disk was busy")
@@ -131,8 +153,11 @@ async def test_worker_lease_returns_rendered_markdown(services) -> None:
         title="MCP OAuth", content="Grok requires DCR.", note_class="research"
     )
     await services.sync_queue.enqueue(
-        job_type="write_note", object_type="note", object_id=note_id,
-        vault_path="30-Research/mcp-oauth.md", payload={},
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path="30-Research/mcp-oauth.md",
+        payload={},
     )
 
     async with await _worker_client(services) as client:
@@ -179,9 +204,7 @@ async def test_worker_can_push_a_human_note_edit_back(services) -> None:
 async def test_a_ticked_checkbox_flows_back_to_postgres(services) -> None:
     """Acceptance: a box ticked by hand in Obsidian updates canonical state."""
     list_id, _ = await services.lists.create(name="Personal AI tasks", list_type="task")
-    item_id, _ = await services.lists.add_item(
-        list_id=list_id, text="Test the Gemini connector"
-    )
+    item_id, _ = await services.lists.add_item(list_id=list_id, text="Test the Gemini connector")
 
     async with await _worker_client(services) as client:
         response = await client.post(
@@ -274,8 +297,10 @@ async def test_audit_records_who_changed_what(services) -> None:
     from personal_context_mcp.auth.principal import Principal
 
     principal = Principal(
-        subject="tester@example.com", client_id="cl-1",
-        client_name="Claude", provider="claude",
+        subject="tester@example.com",
+        client_id="cl-1",
+        client_name="Claude",
+        provider="claude",
     )
     await services.sessions.checkpoint(
         provider="claude",
@@ -312,9 +337,12 @@ async def test_a_degraded_classification_queues_reclassification(services) -> No
     assert any("classifier was unavailable" in n for n in result.notes)
     # The data itself was still saved in full.
     assert result.session_summary_id is not None
-    assert await services.db.fetchval(
-        "SELECT count(*) FROM reclassification_queue WHERE object_type = 'checkpoint'"
-    ) == 1
+    assert (
+        await services.db.fetchval(
+            "SELECT count(*) FROM reclassification_queue WHERE object_type = 'checkpoint'"
+        )
+        == 1
+    )
 
 
 async def test_review_reclassify_records_the_override(services) -> None:
@@ -341,8 +369,11 @@ async def test_review_reclassify_records_the_override(services) -> None:
     )
 
     await services.review.resolve(
-        review_id, status="reclassified", resolution={"project": "alpha"},
-        overridden=True, override_note="it was Alpha all along",
+        review_id,
+        status="reclassified",
+        resolution={"project": "alpha"},
+        overridden=True,
+        override_note="it was Alpha all along",
     )
 
     event = await services.db.fetchrow(

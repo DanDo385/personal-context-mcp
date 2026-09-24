@@ -127,8 +127,12 @@ async def live_server(settings):
 
     settings.base_url = f"http://127.0.0.1:{port}"
     config = uvicorn.Config(
-        create_app(settings), host="127.0.0.1", port=port,
-        log_config=None, access_log=False, lifespan="on",
+        create_app(settings),
+        host="127.0.0.1",
+        port=port,
+        log_config=None,
+        access_log=False,
+        lifespan="on",
     )
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
