@@ -151,6 +151,11 @@ class VaultPaths:
             path = f"{self._root(note_class)}/{filename}"
         return validate_vault_path(path, self._roots)
 
+    def moc(self, title: str) -> str:
+        """Maps of Content live together under the atlas root."""
+        filename = f"{safe_filename(slugify(title) or 'map')}.md"
+        return validate_vault_path(f"{self._root('atlas')}/{filename}", self._roots)
+
     def project_readme(self, project_slug: str) -> str:
         return validate_vault_path(
             f"{self._root('project')}/{slugify(project_slug)}/project.md", self._roots

@@ -261,9 +261,7 @@ async def test_references_in_different_conversations_stay_separate(services) -> 
     b, _ = await services.sessions.ensure_conversation(
         provider="claude", provider_conversation_id="conv-b"
     )
-    first = await services.artifacts.register_reference(
-        title="photo.jpg", source_conversation_id=a
-    )
+    first = await services.artifacts.register_reference(title="photo.jpg", source_conversation_id=a)
     second = await services.artifacts.register_reference(
         title="photo.jpg", source_conversation_id=b
     )

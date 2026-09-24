@@ -1,0 +1,24 @@
+# Only the package, its lockfile and metadata are needed to serve requests.
+.data/
+.venv/
+.tools/
+exports/
+tests/
+scripts/
+skills/
+instructions/
+migrations/
+deploy/
+docker-compose.yml
+Dockerfile
+*.zip
+.env
+.env.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+CLAUDE.md
+CONTRIBUTING.md
+_uv/
+docs/
+.1password/

@@ -78,6 +78,19 @@ class ClassificationResult:
         return {key: answer.as_json() for key, answer in self.answers.items()}
 
 
+def answers_from_json(data: dict[str, Any]) -> dict[str, Answer]:
+    """Inverse of :meth:`ClassificationResult.answers_json`, for stored events."""
+    return {
+        key: Answer(
+            kind=str(item["type"]),
+            value=item["value"],
+            confidence=item.get("confidence"),
+            probabilities={str(k): float(v) for k, v in (item.get("probabilities") or {}).items()},
+        )
+        for key, item in data.items()
+    }
+
+
 @runtime_checkable
 class Classifier(Protocol):
     name: str
@@ -100,6 +113,12 @@ class Classifier(Protocol):
 
     async def classify_list_candidate(
         self, state: dict[str, Any], list_candidates: dict[str, str]
+    ) -> ClassificationResult: ...
+
+    async def classify_note_link(self, state: dict[str, Any]) -> ClassificationResult: ...
+
+    async def classify_moc(
+        self, state: dict[str, Any], moc_candidates: dict[str, str]
     ) -> ClassificationResult: ...
 
     async def aclose(self) -> None: ...

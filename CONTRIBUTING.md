@@ -1,5 +1,17 @@
 # Working on personal-context-mcp
 
+Thanks for helping! Two things matter most here:
+
+1. **The checks pass**: `uv run ruff check src tests`, `uv run ruff format --check src tests`,
+   `uv run mypy src` and `uv run pytest` (with a test database, below). CI runs the same on every pull
+   request.
+2. **The docs keep up.** Many people using this project aren't programmers. If your change affects
+   what someone types, sees or configures, update the matching guide in `docs/guides/`, add any new
+   error message to `docs/troubleshooting.md`, and add new settings to `.env.example` with a
+   plain-language comment. Say what to do, what success looks like, and what to do when it fails.
+
+Never put real secrets, personal email addresses or real conversation data in code, tests or docs.
+
 ## Running a local Postgres without Docker
 
 The test suite and the local slice need PostgreSQL with `pgvector`. If Docker

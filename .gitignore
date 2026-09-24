@@ -33,3 +33,12 @@ exports/
 .idea/
 .vscode/
 .DS_Store
+.vercel
+.env*
+_uv/
+
+# Personal deployment config: copy the matching *.example and fill it in.
+deploy/local.env
+deploy/*.env.op
+!deploy/*.env.op.example
+.env.production

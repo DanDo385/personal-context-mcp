@@ -323,5 +323,19 @@ class RulesClassifier:
             str(state.get("input_hash", "")),
         )
 
+    async def classify_note_link(self, state: dict[str, Any]) -> ClassificationResult:
+        """No semantic judgement without Jev: stay undecided, so nothing is
+        linked. Deterministic title-mention links are made before this is
+        ever asked (wiki/service.py)."""
+        return self._result(
+            {"should_link": Answer("noul", 0.5), "navigation_value": Answer("noul", 0.5)},
+            str(state.get("input_hash", "")),
+        )
+
+    async def classify_moc(
+        self, state: dict[str, Any], moc_candidates: dict[str, str]
+    ) -> ClassificationResult:
+        return self._result({}, str(state.get("input_hash", "")))
+
     async def aclose(self) -> None:
         return None

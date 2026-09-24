@@ -1,0 +1,51 @@
+name: Setup help
+description: Stuck while following the guides? Ask here.
+labels: ["setup-help"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying personal-context-mcp! Before posting, check [Troubleshooting](https://github.com/DanDo385/personal-context-mcp/blob/main/docs/troubleshooting.md).
+        **Never paste your `.env`, keys, passwords or connection strings.** The output of `check` is safe to share.
+  - type: dropdown
+    id: guide
+    attributes:
+      label: Which guide were you following?
+      options:
+        - "1. Install the tools"
+        - "2. Try it on your computer"
+        - "3. Google sign-in"
+        - "4. Database"
+        - "5. Put it online"
+        - "6. Connect the AI apps"
+        - "7. 1Password"
+        - "8. Obsidian"
+        - "9. Import old chats"
+        - "10. Wiki"
+        - "Something else"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you run, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: saw
+    attributes:
+      label: What did you see instead?
+      description: Copy the message exactly (remove anything secret).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `uv run personal-context-mcp check`
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: Your computer
+      placeholder: "e.g. Mac (macOS 15), Ubuntu 24.04, Windows 11 + WSL"

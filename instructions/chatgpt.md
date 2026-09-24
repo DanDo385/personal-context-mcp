@@ -18,7 +18,7 @@ look for "Developer mode" elsewhere in Apps & Connectors.)
 
 ChatGPT connects over public HTTPS only. There is no stdio option, and a
 server on your laptop will not work without OpenAI's own tunnel — which is why
-this is deployed to Cloud Run rather than run locally.
+the server is put online (docs/guides/05-put-it-online.md) rather than run locally.
 
 ## 3. Custom instructions
 
@@ -44,7 +44,7 @@ ways, in descending order of how reliably ChatGPT uses them:
 | --- | --- |
 | Transport | Streamable HTTP and SSE |
 | Auth | OAuth (DCR supported) |
-| Tools | all 45 |
+| Tools | all 48 |
 | Write approval | ChatGPT confirms write actions |
 | Mobile (iOS) | connectors configured on web are available in the app |
 

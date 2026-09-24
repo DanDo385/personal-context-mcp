@@ -1,7 +1,7 @@
 # Local development stack: Postgres with pgvector, plus the MCP server.
 #
 # This is NOT the production topology. In production, Postgres and object
-# storage are Supabase, and the server runs on Cloud Run. See the README.
+# storage are Supabase, and the server runs on Vercel. See docs/guides/.
 
 services:
   db:

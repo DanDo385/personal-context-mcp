@@ -26,7 +26,7 @@ from typing import Any
 
 from typesafe_sdk import Choice, Noul, Score
 
-QUESTIONS_VERSION = "2026-09-21.1"
+QUESTIONS_VERSION = "2026-09-24.1"
 
 #: Offered whenever a Choice ranges over projects, so "none of these" is
 #: always reachable.
@@ -153,6 +153,15 @@ def checkpoint_questions(project_candidates: dict[str, str]) -> dict[str, Any]:
                 "security-sensitive material that the person would not want "
                 "copied into a synced notes vault or sent to a third-party API "
                 "without being asked first."
+            )
+        ),
+        "deep_extraction": Noul(
+            instructions=(
+                "Reading the complete transcript closely would yield decisions, "
+                "durable facts, tasks, or reusable technical or research findings "
+                "that the state shown here does not already capture. Answer no "
+                "for small talk, one-off lookups and questions resolved in the "
+                "moment, however long the transcript is."
             )
         ),
         "destination": Choice(
@@ -293,6 +302,90 @@ def list_candidate_questions(list_candidates: dict[str, str]) -> dict[str, Any]:
                 "Choose 'none' if none of them is a natural home for it."
             ),
             criteria={**list_candidates, "none": "No existing list is a natural home."},
+        ),
+    }
+
+
+# --------------------------------------------------------------------------
+# Wiki graph: links between notes and Map-of-Content membership
+# --------------------------------------------------------------------------
+
+#: How one note relates to another. Python writes the link; Jev only names it.
+WIKI_RELATION_CRITERIA: dict[str, str] = {
+    "prerequisite": "The target explains something a reader needs before the source makes sense.",
+    "related_concept": "The two are distinct ideas that are usefully read together.",
+    "implementation": "The source is a concrete implementation, use or instance of the target.",
+    "part_of": "The source is a component, subtopic or chapter of the larger target.",
+    "example": "One is a worked example of the other.",
+    "source": "The target is where the source's information came from.",
+    "tool": "The target is a tool, library or product the source uses.",
+    "conflicting_view": "The two take different or opposing positions on the same question.",
+    "continuation": "The target picks up where the source left off, later in time.",
+}
+
+#: Sections of a Map of Content note. Python orders and renders them.
+MOC_SECTION_CRITERIA: dict[str, str] = {
+    "fundamentals": "Explains a core idea or definition of the topic.",
+    "how_to": "Practical steps, setup or configuration.",
+    "implementations": "A concrete system, project or integration built on the topic.",
+    "research": "An investigation, comparison or set of findings.",
+    "decisions": "Records choices made and why.",
+    "reference": "Lookup material: specs, lists, links, commands.",
+    "other": "Belongs in this map but in none of the sections above.",
+}
+
+#: Thresholds for acting on wiki answers. Tuned by hand against a reviewed
+#: sample (docs/guides/10-build-your-wiki.md, "Tuning"). Links are visible in
+#: the vault, so the bar is high; below the review line nothing happens at all.
+WIKI_LINK_AUTO = 0.90
+WIKI_LINK_NAVIGATION_AUTO = 0.80
+WIKI_LINK_REVIEW = 0.65
+MOC_AUTO = 0.85
+MOC_REVIEW = 0.60
+NO_MOC = "none"
+
+
+def link_questions() -> dict[str, Any]:
+    """One candidate pair of notes: should the source link to the target?"""
+    return {
+        "should_link": Noul(
+            instructions=(
+                "A reader of the source note would benefit from an explicit link "
+                "to the target note: following it would help them understand or "
+                "act on the source. Sharing a broad field (both are about AI, both "
+                "mention Python) is not enough."
+            )
+        ),
+        "navigation_value": Noul(
+            instructions=(
+                "The link would still be useful months from now to someone "
+                "browsing the vault, rather than being a coincidence of wording."
+            )
+        ),
+        "relation": Choice(
+            instructions="How does the source note relate to the target note?",
+            criteria=WIKI_RELATION_CRITERIA,
+        ),
+    }
+
+
+def moc_questions(moc_candidates: dict[str, str]) -> dict[str, Any]:
+    """Which Map of Content, and which section of it, a note belongs in."""
+    return {
+        "moc": Choice(
+            instructions=(
+                "Which of these maps of content should list this note as one of "
+                "its entries? Choose the most specific map that the note is "
+                "substantially about."
+            ),
+            criteria={
+                **moc_candidates,
+                NO_MOC: "The note is not substantially about any of these topics.",
+            },
+        ),
+        "section": Choice(
+            instructions="Within that map, which section describes this note best?",
+            criteria=MOC_SECTION_CRITERIA,
         ),
     }
 

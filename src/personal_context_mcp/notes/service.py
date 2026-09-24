@@ -17,6 +17,7 @@ from personal_context_mcp.db.pool import Database
 from personal_context_mcp.embeddings.service import EmbeddingService
 from personal_context_mcp.errors import NotFoundError
 from personal_context_mcp.models import NoteRecord
+from personal_context_mcp.obsidian.render import extract_note_body
 from personal_context_mcp.util import sha256_text, slugify
 
 
@@ -284,9 +285,20 @@ class NoteService:
         )
 
     async def apply_vault_edit(
-        self, *, vault_path: str, content: str, author: str = "human"
+        self,
+        *,
+        vault_path: str,
+        content: str,
+        author: str = "human",
+        file_sha256: str | None = None,
     ) -> dict[str, Any]:
-        """Accept a human's edit from the vault as a new canonical version."""
+        """Accept a human's edit from the vault as a new canonical version.
+
+        ``content`` is the whole file. Only the human-owned body is stored:
+        the frontmatter, the title heading and the generated block (links,
+        maps, sources) are the renderer's and are stripped, or every edit
+        would nest another copy of them into the note.
+        """
         row = await self._db.fetchrow(
             "SELECT id, title, version, content_sha256 FROM notes WHERE vault_path = $1",
             vault_path,
@@ -294,8 +306,11 @@ class NoteService:
         if row is None:
             raise NotFoundError(f"No note is tracked at {vault_path!r}.")
 
-        content_hash = sha256_text(content.strip())
+        body = extract_note_body(content, row["title"])
+        content_hash = sha256_text(body)
         if content_hash == row["content_sha256"]:
+            if file_sha256:
+                await self.mark_synced(row["id"], sha256=file_sha256)
             return {"note_id": str(row["id"]), "changed": False, "version": row["version"]}
 
         version = row["version"] + 1
@@ -303,16 +318,17 @@ class NoteService:
             """
             UPDATE notes
             SET content = $2, content_sha256 = $3, version = $4,
-                vault_synced_sha256 = $3, vault_synced_at = now(),
+                vault_synced_sha256 = coalesce($5, vault_synced_sha256), vault_synced_at = now(),
                 provenance = 'user_statement'
             WHERE id = $1
             """,
             row["id"],
-            content.strip(),
+            body,
             content_hash,
             version,
+            file_sha256,
         )
         await self._add_version(
-            self._db, row["id"], version, row["title"], content.strip(), content_hash, author
+            self._db, row["id"], version, row["title"], body, content_hash, author
         )
         return {"note_id": str(row["id"]), "changed": True, "version": version}

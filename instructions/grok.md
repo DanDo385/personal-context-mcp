@@ -36,7 +36,7 @@ same guidance.
 | --- | --- |
 | Transport | Streamable HTTP |
 | Auth | OAuth — **DCR required**, static client ids not supported |
-| Tools | all 45 |
+| Tools | all 48 |
 | Tier | paid tiers only |
 
 **Three separate products.** xAI has more than one surface that connects to

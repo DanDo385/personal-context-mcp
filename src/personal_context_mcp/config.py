@@ -124,6 +124,26 @@ class Settings(BaseSettings):
     #: Historical bulk imports promote far more conservatively than live work.
     import_auto_route_confidence: float = 0.93
     import_promote_to_vault: bool = False
+    #: Sensitivity every imported conversation starts at. The deterministic
+    #: screen (importers/sensitivity.py) can only raise it. Set to
+    #: highly_sensitive to keep an entire backfill inside the process.
+    import_default_sensitivity: Literal["normal", "private", "highly_sensitive"] = "normal"
+    import_sensitivity_screen: bool = True
+    #: Conversations classified at once during an import or reclassification.
+    import_concurrency: int = 4
+    #: Reuse a stored Jev answer when the exact same state, candidates,
+    #: question set and model were classified before. Makes re-runs
+    #: deterministic and free.
+    classification_cache: bool = True
+
+    # ------------------------------------------------------------ extraction
+    #: Pass 2 of the historical backfill: a frontier model reads the full
+    #: transcript of conversations Jev marked for deep extraction.
+    extraction_provider: Literal["anthropic", "none"] = "none"
+    anthropic_api_key: SecretStr = SecretStr("")
+    extraction_model: str = "claude-opus-5-5"
+    extraction_max_transcript_chars: int = 120_000
+    extraction_concurrency: int = 3
 
     # ------------------------------------------------------------ embeddings
     embedding_provider: EmbeddingProvider = "none"
@@ -132,7 +152,9 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr = SecretStr("")
     #: Sensitivity levels that must never be sent to an external embedding or
     #: classification API.
-    no_external_sensitivity: list[str] = Field(default_factory=lambda: ["highly_sensitive"])
+    no_external_sensitivity: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["highly_sensitive"]
+    )
 
     # -------------------------------------------------------------- obsidian
     obsidian_enabled: bool = True
@@ -249,6 +271,12 @@ class Settings(BaseSettings):
                 "PC_CLASSIFIER=jev requires PC_TYPESAFE_API_KEY (or set "
                 "PC_CLASSIFIER=rules to run deterministic classification only)."
             )
+
+        if (
+            self.extraction_provider == "anthropic"
+            and not self.anthropic_api_key.get_secret_value()
+        ):
+            problems.append("PC_EXTRACTION_PROVIDER=anthropic requires PC_ANTHROPIC_API_KEY.")
 
         if not 0.0 < self.review_confidence <= self.auto_route_confidence <= 1.0:
             problems.append("Require 0 < PC_REVIEW_CONFIDENCE <= PC_AUTO_ROUTE_CONFIDENCE <= 1.")

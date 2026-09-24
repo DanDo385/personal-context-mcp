@@ -7,8 +7,10 @@ Order matters and is the same for every provider:
  3. insert conversations and messages (idempotent on provider ids)
  4. ingest attachments - captured only when the bytes were really in the
     archive, deduplicated by SHA-256 across the whole corpus
- 5. derive a session summary per conversation
- 6. classify with conservative historical thresholds
+ 5. screen sensitivity deterministically, before anything leaves the process
+ 6. derive a session summary and classify it with conservative historical
+    thresholds (a few conversations at a time; identical inputs are answered
+    from the classification cache)
  7. create memory candidates only where confidence is high
  8. associate projects, queue anything ambiguous for review
  9. emit a report
@@ -24,7 +26,7 @@ from typing import Any
 
 from personal_context_mcp.artifacts.archives import ArchiveLimits
 from personal_context_mcp.artifacts.keys import archive_key
-from personal_context_mcp.classifier.policy import Verdict
+from personal_context_mcp.classifier.policy import Routing, Verdict
 from personal_context_mcp.importers.adapters import IMPORTERS, detect_importer
 from personal_context_mcp.importers.base import (
     ConversationImporter,
@@ -32,6 +34,7 @@ from personal_context_mcp.importers.base import (
     NormalizedAttachment,
     NormalizedConversation,
 )
+from personal_context_mcp.importers.sensitivity import ScreenResult, screen_texts
 from personal_context_mcp.logging_setup import get_logger
 from personal_context_mcp.models import CheckpointFact
 from personal_context_mcp.services import Services
@@ -79,6 +82,156 @@ def derive_summary(conversation: NormalizedConversation) -> str:
     )
 
 
+async def screen_conversation(services: Services, conversation_id: Any, texts: list[str]) -> str:
+    """Run the deterministic sensitivity screen and record it on the row.
+
+    Only ever raises the stored level (GREATEST over the ordered enum), so a
+    re-import can never make a conversation less private than it was.
+    """
+    settings = services.settings
+    default = settings.import_default_sensitivity
+    result = (
+        screen_texts(texts, default=default)
+        if settings.import_sensitivity_screen
+        else ScreenResult(level=default)
+    )
+    stored = await services.db.fetchval(
+        """
+        UPDATE conversations
+        SET sensitivity = GREATEST(sensitivity, $2::pc_sensitivity),
+            metadata = metadata || jsonb_build_object('sensitivity_screen', $3::jsonb)
+        WHERE id = $1
+        RETURNING sensitivity::text
+        """,
+        conversation_id,
+        result.level,
+        result.reasons,
+    )
+    return str(stored or result.level)
+
+
+async def route_conversation(
+    services: Services,
+    *,
+    conversation_id: Any,
+    provider: str,
+    title: str | None,
+    summary: str,
+    message_count: int,
+    sensitivity: str,
+    report: ImportReport,
+    use_cache: bool = True,
+) -> Routing | None:
+    """Classify one stored conversation and act on the routing.
+
+    Shared by the importer and by ``reclassify-conversations``. Every write is
+    idempotent - the summary is upserted, memories deduplicate on content,
+    review items on (object, reason) - so running it again on the same
+    conversation only refreshes what changed.
+    """
+    if not summary:
+        return None
+
+    state = {
+        "title": title or "",
+        "provider": provider,
+        "summary": summary,
+        "decisions": [],
+        "facts": [],
+        "tasks": [],
+        "message_count": message_count,
+        "sensitivity": sensitivity,
+        "stated_project": None,
+    }
+    result, routing, event_id = await services.classification.classify_checkpoint(
+        state, object_id=conversation_id, historical_import=True, use_cache=use_cache
+    )
+
+    project_id = (
+        await services.projects.resolve(routing.project_slug) if routing.project_slug else None
+    )
+    async with services.db.transaction() as conn:
+        # A conversation that already has a summary - from an earlier run, or
+        # written by deep extraction - keeps its text, open questions and
+        # context. Only the fields classification owns are refreshed.
+        refreshed = await conn.fetchval(
+            """
+            UPDATE session_summaries
+            SET project_id = coalesce($2, project_id),
+                sensitivity = GREATEST(sensitivity, $3::pc_sensitivity),
+                classification_status = $4::pc_classification_status,
+                updated_at = now()
+            WHERE conversation_id = $1
+            RETURNING id
+            """,
+            conversation_id,
+            project_id,
+            sensitivity,
+            "needs_review" if routing.needs_review else "classified",
+        )
+        if refreshed is None:
+            await services.sessions._upsert_summary(
+                conn,
+                conversation_id=conversation_id,
+                provider=provider,
+                project_id=project_id,
+                title=title,
+                summary=summary,
+                open_questions=[],
+                important_context=[],
+                sensitivity=sensitivity,
+                needs_review=routing.needs_review,
+            )
+        if project_id:
+            await conn.execute(
+                "UPDATE conversations SET project_id = $2 WHERE id = $1",
+                conversation_id,
+                project_id,
+            )
+    report.summaries_created += 1
+
+    # Historical imports create memories only when the classifier is
+    # confident the conversation carries durable value. The alternative -
+    # a memory per old chat - buries the useful ones.
+    if routing.save_memory is Verdict.YES and routing.importance >= 0.6 and not result.degraded:
+        fact = CheckpointFact(
+            content=truncate_for_budget(f"{title or 'Earlier conversation'}: {summary}", 220),
+            kind="knowledge",
+            subject=routing.project_slug or (title or None),
+            provenance="imported_metadata",
+        )
+        saved = await services.memories.save(
+            content=fact.content,
+            kind=fact.kind,
+            subject=fact.subject,
+            project_id=project_id,
+            provenance="imported_metadata",
+            sensitivity=sensitivity,
+            importance=routing.importance,
+            source_provider=provider,
+            source_conversation_id=conversation_id,
+        )
+        if saved.outcome == "created":
+            report.memories_created += 1
+
+    if routing.deep_extract is Verdict.YES and not result.degraded:
+        report.deep_extraction_candidates += 1
+
+    if routing.needs_review:
+        queued = await services.classification.queue_review(
+            object_type="conversation",
+            object_id=conversation_id,
+            reason=routing.review_reasons[0] if routing.review_reasons else "low_confidence",
+            question=f"Imported {provider} conversation {title!r}: where does it belong?",
+            suggested=routing.as_json(),
+            confidence=routing.confidence,
+            classification_event_id=event_id,
+        )
+        if queued:
+            report.reviews_queued += 1
+    return routing
+
+
 class ImportRunner:
     def __init__(self, services: Services) -> None:
         self._services = services
@@ -89,6 +242,10 @@ class ImportRunner:
             max_entry_bytes=settings.max_artifact_file_bytes,
             max_compression_ratio=settings.max_archive_compression_ratio,
         )
+        # Attachments are deduplicated by hash across the whole corpus; two
+        # conversations importing the same bytes at once must not both miss
+        # the duplicate check.
+        self._attachment_lock = asyncio.Lock()
 
     async def run(
         self,
@@ -140,17 +297,33 @@ class ImportRunner:
             archive, provider=provider, digest=digest, store_archive=store_archive
         )
 
+        # Parsing is sequential; storing and classifying run a few at a time,
+        # because each conversation is dominated by a Jev round trip. At most
+        # 2 x concurrency parsed conversations are held in memory.
+        concurrency = max(1, self._services.settings.import_concurrency)
+        semaphore = asyncio.Semaphore(concurrency)
+        pending: set[asyncio.Task[None]] = set()
+
+        async def import_guarded(conversation: NormalizedConversation) -> None:
+            async with semaphore:
+                try:
+                    await self._import_one(conversation, report)
+                except Exception as exc:
+                    logger.exception("failed to import conversation")
+                    report.errors.append(
+                        f"{conversation.provider_conversation_id or '?'}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
         for index, conversation in enumerate(importer.parse(archive)):
             if limit is not None and index >= limit:
                 break
             report.conversations_seen += 1
-            try:
-                await self._import_one(conversation, report)
-            except Exception as exc:
-                logger.exception("failed to import conversation")
-                report.errors.append(
-                    f"{conversation.provider_conversation_id or '?'}: {type(exc).__name__}: {exc}"
-                )
+            if len(pending) >= concurrency * 2:
+                _, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            pending.add(asyncio.create_task(import_guarded(conversation)))
+        if pending:
+            await asyncio.wait(pending)
 
         await self._services.db.execute(
             """
@@ -233,101 +406,39 @@ class ImportRunner:
         )
         report.messages_imported += inserted
 
-        for attachment in conversation.attachments:
-            await self._import_attachment(
-                attachment,
-                conversation=conversation,
-                conversation_id=conversation_id,
-                report=report,
-            )
+        sensitivity = await screen_conversation(
+            services,
+            conversation_id,
+            [conversation.title or "", *(m.content for m in conversation.messages)],
+        )
+        if sensitivity != "normal":
+            report.conversations_screened_sensitive += 1
 
-        # Nothing further to do for a conversation we have seen before.
+        for attachment in conversation.attachments:
+            async with self._attachment_lock:
+                await self._import_attachment(
+                    attachment,
+                    conversation=conversation,
+                    conversation_id=conversation_id,
+                    sensitivity=sensitivity,
+                    report=report,
+                )
+
+        # Nothing further to do for a conversation we have seen before;
+        # `personal-context-mcp reclassify-conversations` revisits old ones.
         if not created:
             return
 
-        summary = derive_summary(conversation)
-        if not summary:
-            return
-
-        state = {
-            "title": conversation.title or "",
-            "provider": conversation.provider,
-            "summary": summary,
-            "decisions": [],
-            "facts": [],
-            "tasks": [],
-            "message_count": len(conversation.messages),
-            "sensitivity": "normal",
-            "stated_project": None,
-        }
-        result, routing, event_id = await services.classification.classify_checkpoint(
-            state, object_id=conversation_id, historical_import=True
+        await route_conversation(
+            services,
+            conversation_id=conversation_id,
+            provider=conversation.provider,
+            title=conversation.title,
+            summary=derive_summary(conversation),
+            message_count=len(conversation.messages),
+            sensitivity=sensitivity,
+            report=report,
         )
-
-        project_id = (
-            await services.projects.resolve(routing.project_slug) if routing.project_slug else None
-        )
-        async with services.db.transaction() as conn:
-            await services.sessions._upsert_summary(
-                conn,
-                conversation_id=conversation_id,
-                provider=conversation.provider,
-                project_id=project_id,
-                title=conversation.title,
-                summary=summary,
-                open_questions=[],
-                important_context=[],
-                sensitivity="normal",
-                needs_review=routing.needs_review,
-            )
-            if project_id:
-                await conn.execute(
-                    "UPDATE conversations SET project_id = $2 WHERE id = $1",
-                    conversation_id,
-                    project_id,
-                )
-        report.summaries_created += 1
-
-        # Historical imports create memories only when the classifier is
-        # confident the conversation carries durable value. The alternative -
-        # a memory per old chat - buries the useful ones.
-        if routing.save_memory is Verdict.YES and routing.importance >= 0.6 and not result.degraded:
-            fact = CheckpointFact(
-                content=truncate_for_budget(
-                    f"{conversation.title or 'Earlier conversation'}: {summary}", 220
-                ),
-                kind="knowledge",
-                subject=routing.project_slug or (conversation.title or None),
-                provenance="imported_metadata",
-            )
-            saved = await services.memories.save(
-                content=fact.content,
-                kind=fact.kind,
-                subject=fact.subject,
-                project_id=project_id,
-                provenance="imported_metadata",
-                importance=routing.importance,
-                source_provider=conversation.provider,
-                source_conversation_id=conversation_id,
-            )
-            if saved.outcome == "created":
-                report.memories_created += 1
-
-        if routing.needs_review:
-            queued = await services.classification.queue_review(
-                object_type="conversation",
-                object_id=conversation_id,
-                reason=routing.review_reasons[0] if routing.review_reasons else "low_confidence",
-                question=(
-                    f"Imported {conversation.provider} conversation "
-                    f"{conversation.title!r}: where does it belong?"
-                ),
-                suggested=routing.as_json(),
-                confidence=routing.confidence,
-                classification_event_id=event_id,
-            )
-            if queued:
-                report.reviews_queued += 1
 
     async def _import_attachment(
         self,
@@ -335,6 +446,7 @@ class ImportRunner:
         *,
         conversation: NormalizedConversation,
         conversation_id: Any,
+        sensitivity: str,
         report: ImportReport,
     ) -> None:
         services = self._services
@@ -399,7 +511,7 @@ class ImportRunner:
                 "source_provider": conversation.provider,
                 "file_paths": [f.relative_path for f in record.files],
                 "conversation_title": conversation.title or "",
-                "sensitivity": "normal",
+                "sensitivity": sensitivity,
             },
             object_id=record.id,
             historical_import=True,
