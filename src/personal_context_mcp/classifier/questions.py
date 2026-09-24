@@ -335,8 +335,8 @@ MOC_SECTION_CRITERIA: dict[str, str] = {
 }
 
 #: Thresholds for acting on wiki answers. Tuned by hand against a reviewed
-#: sample (see README "Tuning"). Links are visible in the vault, so the bar is
-#: high; below the review line nothing happens at all.
+#: sample (docs/guides/10-build-your-wiki.md, "Tuning"). Links are visible in
+#: the vault, so the bar is high; below the review line nothing happens at all.
 WIKI_LINK_AUTO = 0.90
 WIKI_LINK_NAVIGATION_AUTO = 0.80
 WIKI_LINK_REVIEW = 0.65

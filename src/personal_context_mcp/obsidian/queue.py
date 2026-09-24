@@ -25,6 +25,13 @@ logger = get_logger(__name__)
 LEASE_SECONDS = 300
 
 
+#: Where the hash of the file last written for an object is kept.
+_SYNCED_HASH_SQL: dict[str, str] = {
+    "note": "SELECT vault_synced_sha256 FROM notes WHERE id = $1",
+    "moc": "SELECT rendered_sha256 FROM mocs WHERE id = $1",
+}
+
+
 class SyncQueue:
     def __init__(self, db: Database, allowed_roots: dict[str, str]) -> None:
         self._db = db
@@ -45,9 +52,18 @@ class SyncQueue:
         classification_event_id: UUID | None = None,
         conn: asyncpg.Connection | None = None,
     ) -> UUID | None:
-        """Queue a vault write. Validates the path before it is ever stored."""
+        """Queue a vault write. Validates the path before it is ever stored.
+
+        For notes and maps, a write that does not say what it expects to
+        replace is given the hash of the file the worker last wrote. The
+        worker refuses to overwrite a file whose hash differs, so a human edit
+        it has not yet seen - say one made while it was stopped - comes back
+        as a conflict instead of being overwritten.
+        """
         vault_path = validate_vault_path(vault_path, self._roots)
         executor = conn or self._db
+        if expected_sha256 is None and object_type in _SYNCED_HASH_SQL:
+            expected_sha256 = await executor.fetchval(_SYNCED_HASH_SQL[object_type], object_id)
 
         # Supersede any open job for the same path: the newest content wins
         # and the queue stays one-deep per file.

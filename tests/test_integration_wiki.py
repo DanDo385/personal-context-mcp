@@ -227,3 +227,24 @@ async def test_doctor_reports_orphans(services) -> None:
     health = await WikiService(services).doctor()
     assert health["orphans"] == 1
     assert health["orphan_sample"] == ["Lonely note"]
+
+
+async def test_note_writes_expect_the_file_last_written(services) -> None:
+    """A write queued without an expected hash inherits the last-written one,
+    so the worker cannot overwrite a human edit it has not seen yet."""
+    note_id = await _note(services, "Edited offline", "Original body.")
+    await services.db.execute(
+        "UPDATE notes SET vault_synced_sha256 = 'hash-on-disk' WHERE id = $1", note_id
+    )
+    path = await services.db.fetchval("SELECT vault_path FROM notes WHERE id = $1", note_id)
+    job_id = await services.sync_queue.enqueue(
+        job_type="write_note",
+        object_type="note",
+        object_id=note_id,
+        vault_path=path,
+        payload={"note_id": str(note_id)},
+    )
+    expected = await services.db.fetchval(
+        "SELECT expected_sha256 FROM sync_jobs WHERE id = $1", job_id
+    )
+    assert expected == "hash-on-disk"

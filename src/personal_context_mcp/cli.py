@@ -34,6 +34,7 @@ from personal_context_mcp.importers.reclassify import (
 from personal_context_mcp.importers.runner import ImportRunner
 from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.services import build_services, set_services
+from personal_context_mcp.setup_wizard import Answers, build_env, next_steps
 from personal_context_mcp.wiki.service import WikiService
 
 
@@ -45,10 +46,121 @@ async def _with_services(settings: Settings):
     return services
 
 
+def _configure_cli_logging(settings: Settings) -> None:
+    """One-off commands print their own readable output, so their log lines
+    are limited to warnings unless PC_LOG_LEVEL was set explicitly. The
+    server (``serve``) keeps its configured level."""
+    explicit = "log_level" in settings.model_fields_set
+    configure_logging(settings.log_level if explicit else "WARNING")
+
+
 @click.group()
 @click.version_option(package_name="personal-context-mcp")
 def main() -> None:
     """Shared AI context: memory, projects, lists, notes and artifacts."""
+
+
+@main.command()
+@click.option(
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path(".env"),
+    show_default=True,
+    help="Where to write the settings file.",
+)
+@click.option("--force", is_flag=True, help="Overwrite the file if it already exists.")
+def init(output: Path, force: bool) -> None:
+    """Answer a few questions and get a working settings file.
+
+    Generates every secret for you. Safe to run again: it will not overwrite
+    an existing file unless you pass --force.
+    """
+    if output.exists() and not force:
+        raise click.ClickException(
+            f"{output} already exists. Run again with --force to replace it "
+            "(the old secrets will stop working)."
+        )
+
+    click.secho("\nLet's set up personal-context-mcp.\n", bold=True)
+    click.echo("Press Enter to accept the suggestion shown in [brackets].\n")
+
+    click.echo(
+        "1. Where will it run?\n"
+        "   local  - only on this computer, to try it out. The AI apps on your phone\n"
+        "            and on the web cannot reach it.\n"
+        "   online - on the internet (for example Vercel), so ChatGPT, Claude, Gemini\n"
+        "            and Grok can all use it. Needs a free Google sign-in app and a\n"
+        "            free Supabase database first (the guides walk you through both)."
+    )
+    mode = click.prompt("   Choose", type=click.Choice(["local", "online"]), default="local")
+
+    click.echo(
+        "\n2. Which email do you sign in to your AI apps with? Only this account will\n"
+        "   be allowed in. Separate several with commas."
+    )
+    emails = [e.strip() for e in click.prompt("   Email").split(",") if e.strip() and "@" in e]
+    if not emails:
+        raise click.ClickException("At least one email address is needed.")
+
+    answers = Answers(mode=mode, emails=emails)  # type: ignore[arg-type]
+
+    if mode == "online":
+        click.echo(
+            "\n3. What web address will it live at? It must start with https://\n"
+            "   (for example https://context.example.com or https://my-memory.vercel.app)."
+        )
+        answers.base_url = click.prompt("   Address").rstrip("/")
+        if not answers.base_url.startswith("https://"):
+            raise click.ClickException("The address must start with https://")
+        answers.auth = "google"
+        click.echo(
+            "\n4. Google sign-in app (docs/guides/03-google-sign-in.md shows how to make\n"
+            "   one in about 10 minutes). Leave blank to fill in later."
+        )
+        answers.oauth_client_id = click.prompt("   Client ID", default="", show_default=False)
+        answers.oauth_client_secret = click.prompt(
+            "   Client secret", default="", show_default=False, hide_input=True
+        )
+        click.echo(
+            "\n5. Supabase database (docs/guides/04-database.md). Paste the connection\n"
+            "   string that starts with postgresql:// and the project URL and service key."
+        )
+        answers.database_url = click.prompt("   Connection string")
+        answers.supabase_url = click.prompt(
+            "   Project URL (https://....supabase.co)", default="", show_default=False
+        )
+        if answers.supabase_url:
+            answers.supabase_service_key = click.prompt("   Service role key", hide_input=True)
+    else:
+        click.echo("\n3. Database. The suggestion matches `docker compose up -d db` in this repo.")
+        answers.database_url = click.prompt("   Connection string", default=answers.database_url)
+
+    click.echo(
+        "\nOptional extras - press Enter to skip; you can add them to the file later.\n"
+        "   TypeSafe (Jev) key: sorts years of old chats cheaply. https://console.typesafe.ai/keys\n"
+        "   Anthropic key: reads your most important old chats closely and writes proper notes."
+    )
+    answers.typesafe_api_key = click.prompt(
+        "   TypeSafe key", default="", show_default=False, hide_input=True
+    )
+    answers.anthropic_api_key = click.prompt(
+        "   Anthropic key", default="", show_default=False, hide_input=True
+    )
+    answers.vault_path = click.prompt(
+        "\nWhere is (or should be) your Obsidian vault?", default=answers.vault_path
+    )
+
+    output.write_text(build_env(answers), encoding="utf-8")
+    output.chmod(0o600)
+    click.secho(f"\nWrote {output} (readable only by you).", fg="green", bold=True)
+    if "static_token" in answers.generated:
+        click.echo(
+            "\nYour test access token (also saved in the file):\n"
+            f"   {answers.generated['static_token']}"
+        )
+    click.secho("\nNext steps:", bold=True)
+    for number, step in enumerate(next_steps(answers), start=1):
+        click.echo(f"  {number}. {step}")
 
 
 @main.command()
@@ -64,7 +176,7 @@ def serve() -> None:
 def migrate(status: bool) -> None:
     """Apply database migrations."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         db = await Database.connect(settings)
@@ -88,7 +200,7 @@ def migrate(status: bool) -> None:
 def check() -> None:
     """Validate configuration and connectivity without starting the server."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     problems = settings.validate_startup()
     for problem in problems:
@@ -195,7 +307,7 @@ def import_export(
     settings = get_settings()
     if concurrency is not None:
         settings.import_concurrency = concurrency
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
@@ -231,7 +343,7 @@ def import_export(
 def reclassify(limit: int) -> None:
     """Retry classification for objects a classifier outage left pending."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
@@ -328,7 +440,7 @@ def reclassify_conversations_cmd(
     export archive is not needed again.
     """
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
@@ -372,7 +484,7 @@ def extract(
     PC_NO_EXTERNAL_SENSITIVITY are never sent. Start with --dry-run.
     """
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
@@ -411,7 +523,7 @@ def wiki() -> None:
 
 def _run_wiki(action):  # type: ignore[no-untyped-def]
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
@@ -502,7 +614,7 @@ def wiki_doctor() -> None:
 def review(limit: int) -> None:
     """Show the open human-review queue."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    _configure_cli_logging(settings)
 
     async def run() -> None:
         services = await _with_services(settings)
