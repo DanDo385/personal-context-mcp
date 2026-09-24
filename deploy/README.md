@@ -148,6 +148,21 @@ alias pcm='op run --env-file=deploy/admin.env.op -- uv run personal-context-mcp'
    pcm reclassify-conversations --limit 1000
    ```
 
+5. **Build the wiki graph.** Python finds candidates, title mentions link
+   directly, Jev judges the rest, Postgres stores the graph, and the worker
+   renders it into the vault:
+   ```bash
+   pcm wiki seed-mocs --min-mentions 3     # maps from topics extraction found repeatedly
+   pcm wiki add-moc "MCP" --description "Model Context Protocol"
+   pcm wiki links --limit 500              # note links
+   pcm wiki mocs --limit 500               # map membership and section
+   pcm wiki render                         # queue changed notes and maps for the vault
+   pcm wiki doctor                         # orphans, empty maps, pending reviews
+   pcm review                              # links and memberships in the review band
+   ```
+   The thresholds are in `classifier/questions.py` (`WIKI_LINK_*`, `MOC_*`).
+   Start conservative, review a sample, then tune.
+
 Privacy knobs, all in `admin.env.op`:
 
 - `PC_IMPORT_DEFAULT_SENSITIVITY`: the floor for every imported conversation.

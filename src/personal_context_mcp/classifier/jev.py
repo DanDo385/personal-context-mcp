@@ -30,7 +30,9 @@ from personal_context_mcp.classifier.questions import (
     QUESTIONS_VERSION,
     artifact_questions,
     checkpoint_questions,
+    link_questions,
     list_candidate_questions,
+    moc_questions,
     note_questions,
 )
 from personal_context_mcp.classifier.rules import RulesClassifier
@@ -222,6 +224,24 @@ class JevClassifier:
             list_candidate_questions(list_candidates),
             fallback=self._fallback.classify_list_candidate,
             candidates=list_candidates,
+        )
+
+    async def classify_note_link(self, state: dict[str, Any]) -> ClassificationResult:
+        return await self._ask(
+            state,
+            link_questions(),
+            fallback=lambda s, _c: self._fallback.classify_note_link(s),
+            candidates={},
+        )
+
+    async def classify_moc(
+        self, state: dict[str, Any], moc_candidates: dict[str, str]
+    ) -> ClassificationResult:
+        return await self._ask(
+            state,
+            moc_questions(moc_candidates),
+            fallback=self._fallback.classify_moc,
+            candidates=moc_candidates,
         )
 
     async def aclose(self) -> None:

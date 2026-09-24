@@ -117,15 +117,33 @@ class SyncQueue:
         return [dict(r) for r in rows]
 
     async def complete(self, job_id: UUID, *, worker_id: str, written_sha256: str | None) -> None:
-        await self._db.execute(
+        job = await self._db.fetchrow(
             """
             UPDATE sync_jobs
             SET status = 'done', completed_at = now(), last_error = NULL
             WHERE id = $1 AND lease_owner = $2
+            RETURNING object_type, object_id
             """,
             job_id,
             worker_id,
         )
+        if job is not None and written_sha256:
+            # Remember exactly what is on disk, so the next write of this file
+            # can say what it expects to replace and a human edit made in
+            # between comes back as a conflict instead of being overwritten.
+            if job["object_type"] == "note":
+                await self._db.execute(
+                    "UPDATE notes SET vault_synced_sha256 = $2, vault_synced_at = now() "
+                    "WHERE id = $1",
+                    job["object_id"],
+                    written_sha256,
+                )
+            elif job["object_type"] == "moc":
+                await self._db.execute(
+                    "UPDATE mocs SET rendered_sha256 = $2 WHERE id = $1",
+                    job["object_id"],
+                    written_sha256,
+                )
         await self._event(
             job_id,
             direction="outbound",

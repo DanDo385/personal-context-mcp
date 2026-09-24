@@ -19,8 +19,14 @@ from starlette.responses import JSONResponse, Response
 
 from personal_context_mcp.config import Settings
 from personal_context_mcp.logging_setup import get_logger
-from personal_context_mcp.obsidian.render import render_artifact_note, render_list, render_note
+from personal_context_mcp.obsidian.render import (
+    render_artifact_note,
+    render_list,
+    render_moc,
+    render_note,
+)
 from personal_context_mcp.services import Services
+from personal_context_mcp.wiki.service import SECTION_TITLES, moc_render_input, note_graph
 
 logger = get_logger(__name__)
 
@@ -103,7 +109,21 @@ async def _render_job(services: Services, job: dict[str, Any]) -> dict[str, Any]
             )
             if row is None:
                 return None
-            payload["content"] = render_note(dict(row))
+            related, mocs = await note_graph(services, job["object_id"])
+            payload["content"] = render_note(dict(row), related=related, mocs=mocs)
+            payload["content_type"] = "text/markdown"
+
+        elif job["job_type"] == "write_moc":
+            data = await moc_render_input(services, job["object_id"])
+            if data is None:
+                return None
+            payload["content"] = render_moc(
+                data["moc"],
+                data["sections"],
+                section_titles=SECTION_TITLES,
+                children=data["children"],
+                parent=data["parent"],
+            )
             payload["content_type"] = "text/markdown"
 
         elif job["job_type"] == "write_list":
@@ -220,7 +240,9 @@ async def push_edits(request: Request, services: Services) -> Response:
         try:
             if kind == "note":
                 result = await services.notes.apply_vault_edit(
-                    vault_path=edit["vault_path"], content=edit["content"]
+                    vault_path=edit["vault_path"],
+                    content=edit["content"],
+                    file_sha256=str(edit.get("sha256") or "") or None,
                 )
                 applied.append({"vault_path": edit["vault_path"], **result})
             elif kind == "list_items":

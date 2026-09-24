@@ -116,6 +116,20 @@ boot on one (`auth_mode=none|static` in prod, plain HTTP in prod, OAuth without 
 **Embeddings are optional.** `PC_EMBEDDING_PROVIDER=none` is the default; retrieval falls back to
 full-text search alone, so nothing may assume a vector is present.
 
+**Historical backfill is two passes.** Import screens sensitivity deterministically
+(`importers/sensitivity.py`, can only raise a level), then Jev classifies an excerpt (pass 1),
+cached by input in `classification_events.metadata.cache_key`. `extraction/deep.py` (pass 2)
+sends only conversations Jev marked `deep_extraction=yes` to Claude and writes the result through
+`session_checkpoint`. `reclassify-conversations` redoes pass 1 from stored messages.
+
+**The wiki graph lives in Postgres** (`note_edges`, `mocs`, `moc_memberships`; `wiki/service.py`).
+Links and maps render into a marked generated block at note-render time (`obsidian/render.py`),
+and `extract_note_body` strips that block, the frontmatter and the title from human edits before
+they are stored. Keep both halves in step.
+
+**Deployment** is Vercel (`main.py` → `personal_context_mcp.asgi:app`) at `context.magro.dev`; see
+`deploy/README.md`. Secrets are `op://` references resolved by `op run`, never files.
+
 ### Consumers outside `src/`
 
 - `skills/` — eight portable workflow skills handed to the providers.

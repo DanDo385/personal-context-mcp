@@ -88,6 +88,25 @@ class ClassificationService:
         object_id: UUID | None,
         extra: dict[str, Any] | None = None,
     ) -> UUID | None:
+        return await self.record_raw(
+            result,
+            object_type=object_type,
+            object_id=object_id,
+            action_taken=routing.action_taken,
+            confidence=routing.confidence,
+            metadata={"routing": routing.as_json(), **(extra or {})},
+        )
+
+    async def record_raw(
+        self,
+        result: ClassificationResult,
+        *,
+        object_type: str,
+        object_id: UUID | None,
+        action_taken: str,
+        confidence: float | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> UUID | None:
         try:
             return await self._db.fetchval(
                 """
@@ -106,12 +125,12 @@ class ClassificationService:
                 result.questions_version,
                 result.input_hash,
                 result.answers_json(),
-                routing.confidence,
-                routing.action_taken,
+                confidence,
+                action_taken,
                 result.degraded,
                 result.input_tokens,
                 result.duration_ms,
-                {"routing": routing.as_json(), "error": result.error, **(extra or {})},
+                {"error": result.error, **(metadata or {})},
             )
         except Exception:
             logger.exception("failed to persist classification event")
@@ -216,6 +235,43 @@ class ClassificationService:
             )
         )
 
+    async def ask_cached(
+        self,
+        kind: str,
+        ask: Callable[[dict[str, Any], dict[str, str]], Awaitable[ClassificationResult]],
+        state: dict[str, Any],
+        candidates: dict[str, str],
+        *,
+        use_cache: bool = True,
+    ) -> tuple[ClassificationResult, dict[str, Any]]:
+        """Ask, or answer from the cache. Returns the result and the metadata
+        to record with it (the cache key and whether it was a hit)."""
+        # Only Jev answers are worth caching: rules are free and deterministic,
+        # and a degraded or privacy-blocked result must be asked again.
+        cacheable = self._settings.classification_cache and self._classifier.name == "jev"
+        key = self.cache_key(kind, state, candidates) if cacheable else None
+        result = await self._cached(key) if key and use_cache else None
+        cache_hit = result is not None
+        if result is None:
+            result = await ask(state, candidates)
+        extra: dict[str, Any] = {}
+        if key and result.classifier == "jev" and not result.degraded:
+            extra = {"cache_key": key, "cache_hit": cache_hit}
+        return result, extra
+
+    async def classify_note_link(
+        self, state: dict[str, Any], *, object_id: UUID | None = None
+    ) -> tuple[ClassificationResult, dict[str, Any]]:
+        classifier = self._classifier
+        return await self.ask_cached(
+            "note_link", lambda s, _c: classifier.classify_note_link(s), state, {}
+        )
+
+    async def classify_moc(
+        self, state: dict[str, Any], candidates: dict[str, str]
+    ) -> tuple[ClassificationResult, dict[str, Any]]:
+        return await self.ask_cached("moc", self._classifier.classify_moc, state, candidates)
+
     async def _classify(
         self,
         kind: str,
@@ -227,20 +283,8 @@ class ClassificationService:
         use_cache: bool = True,
     ) -> tuple[ClassificationResult, Routing, UUID | None]:
         candidates = await self.project_candidates()
-        # Only Jev answers are worth caching: rules are free and deterministic,
-        # and a degraded or privacy-blocked result must be asked again.
-        cacheable = self._settings.classification_cache and self._classifier.name == "jev"
-        key = self.cache_key(kind, state, candidates) if cacheable else None
-
-        result = await self._cached(key) if key and use_cache else None
-        cache_hit = result is not None
-        if result is None:
-            result = await ask(state, candidates)
-
+        result, extra = await self.ask_cached(kind, ask, state, candidates, use_cache=use_cache)
         routing = self.policy(historical_import=historical_import).route(result)
-        extra: dict[str, Any] = {}
-        if key and result.classifier == "jev" and not result.degraded:
-            extra = {"cache_key": key, "cache_hit": cache_hit}
         event_id = await self.record(
             result, routing, object_type=kind, object_id=object_id, extra=extra
         )

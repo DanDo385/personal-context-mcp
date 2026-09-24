@@ -7,6 +7,7 @@ recovered from the item text.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 PC_ID_PREFIX = "pc:id="
@@ -80,7 +81,34 @@ def render_list(list_row: dict[str, Any], items: list[dict[str, Any]]) -> str:
     return "\n".join(body)
 
 
-def render_note(note: dict[str, Any]) -> str:
+#: Everything between these markers is regenerated on every write and is
+#: stripped from a human edit before it is stored, so links and sources never
+#: leak into the canonical body.
+GENERATED_START = (
+    "<!-- pc:generated - maintained by personal-context-mcp; edits here are replaced -->"
+)
+GENERATED_END = "<!-- /pc:generated -->"
+
+_FRONTMATTER = re.compile(r"\A---\n.*?\n---\n?", re.S)
+_GENERATED = re.compile(
+    re.escape(GENERATED_START.split(" - ")[0]) + r".*?" + re.escape(GENERATED_END), re.S
+)
+
+
+def wikilink(target_stem: str, title: str) -> str:
+    """Vault files are named by slug, so the link names the file and shows
+    the title."""
+    clean = title.replace("]", "").replace("|", "-").strip()
+    return f"[[{target_stem}|{clean}]]" if clean and clean != target_stem else f"[[{target_stem}]]"
+
+
+def render_note(
+    note: dict[str, Any],
+    *,
+    related: list[tuple[str, str, str]] | None = None,
+    mocs: list[tuple[str, str]] | None = None,
+) -> str:
+    """``related`` is (file stem, title, relation); ``mocs`` is (stem, title)."""
     front = _frontmatter(
         {
             "pc_type": "note",
@@ -97,16 +125,94 @@ def render_note(note: dict[str, Any]) -> str:
         }
     )
     parts = [front, "", f"# {note['title']}", "", note["content"].strip(), ""]
+
+    generated: list[str] = []
+    if mocs:
+        generated += ["## Maps", ""]
+        generated += [f"- {wikilink(stem, title)}" for stem, title in mocs]
+        generated.append("")
+    if related:
+        generated += ["## Related", ""]
+        generated += [
+            f"- {wikilink(stem, title)} · {relation.replace('_', ' ')}"
+            for stem, title, relation in related
+        ]
+        generated.append("")
     citations = note.get("citations") or []
     if citations:
-        parts += ["", "## Sources", ""]
+        generated += ["## Sources", ""]
         for citation in citations:
             if isinstance(citation, dict):
                 title = citation.get("title") or citation.get("url") or "source"
                 url = citation.get("url")
-                parts.append(f"- [{title}]({url})" if url else f"- {title}")
+                generated.append(f"- [{title}]({url})" if url else f"- {title}")
             else:
-                parts.append(f"- {citation}")
+                generated.append(f"- {citation}")
+        generated.append("")
+    if generated:
+        parts += ["", GENERATED_START, "", *generated, GENERATED_END, ""]
+    return "\n".join(parts)
+
+
+def extract_note_body(text: str, title: str | None = None) -> str:
+    """Recover the human-owned body from a rendered note file.
+
+    Strips the frontmatter, the ``# Title`` heading the renderer adds, and the
+    generated block. Files rendered before the generated block existed end
+    with a bare ``## Sources`` section, which is stripped too.
+    """
+    body = _FRONTMATTER.sub("", text.replace("\r\n", "\n"), count=1)
+    body = _GENERATED.sub("", body)
+    lines = body.strip("\n").split("\n")
+    if lines and lines[0].startswith("# ") and (title is None or lines[0][2:].strip() == title):
+        lines = lines[1:]
+    body = "\n".join(lines).strip()
+    legacy = body.rfind("\n## Sources\n")
+    if legacy != -1 and "\n## " not in body[legacy + 1 :].split("\n", 1)[-1]:
+        body = body[:legacy].rstrip()
+    return body
+
+
+def render_moc(
+    moc: dict[str, Any],
+    sections: dict[str, list[tuple[str, str]]],
+    *,
+    section_titles: dict[str, str],
+    children: list[tuple[str, str]] | None = None,
+    parent: tuple[str, str] | None = None,
+) -> str:
+    """A Map of Content: sections in the order of ``section_titles``, entries
+    sorted by title. Entirely generated - a MOC has no human-owned body."""
+    front = _frontmatter(
+        {
+            "pc_type": "moc",
+            "pc_id": moc["id"],
+            "title": moc["title"],
+            "updated": moc.get("updated_at"),
+            "tags": ["personal-context-mcp/moc"],
+        }
+    )
+    parts = [front, "", f"# {moc['title']}", ""]
+    if moc.get("description"):
+        parts += [str(moc["description"]).strip(), ""]
+    if parent:
+        parts += [f"Part of {wikilink(*parent)}.", ""]
+    for key, heading in section_titles.items():
+        entries = sections.get(key) or []
+        if not entries:
+            continue
+        parts += [f"## {heading}", ""]
+        parts += [
+            f"- {wikilink(stem, title)}"
+            for stem, title in sorted(entries, key=lambda e: e[1].lower())
+        ]
+        parts.append("")
+    if children:
+        parts += ["## Sub-maps", ""]
+        parts += [
+            f"- {wikilink(stem, title)}"
+            for stem, title in sorted(children, key=lambda e: e[1].lower())
+        ]
         parts.append("")
     return "\n".join(parts)
 
