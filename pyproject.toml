@@ -42,6 +42,10 @@ dev = [
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.vercel]
+# Vercel's Python runtime serves this ASGI app; see deploy/README.md.
+entrypoint = "main:app"
+
 [tool.uv.build-backend]
 module-root = "src"
 module-name = ["personal_context_mcp", "obsidian_sync"]

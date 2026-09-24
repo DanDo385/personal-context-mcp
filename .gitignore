@@ -33,3 +33,6 @@ exports/
 .idea/
 .vscode/
 .DS_Store
+.vercel
+.env*
+_uv/
