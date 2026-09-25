@@ -148,3 +148,12 @@ def test_stream_guard_catches_lying_header(tmp_path: Path) -> None:
                 ),
             )
         )
+
+
+def test_supabase_auth_headers_suit_both_key_styles() -> None:
+    from personal_context_mcp.storage.supabase import auth_headers
+
+    assert auth_headers("sb_secret_abc") == {"apikey": "sb_secret_abc"}
+    legacy = auth_headers("eyJhbGciOi.payload.sig")
+    assert legacy["Authorization"] == "Bearer eyJhbGciOi.payload.sig"
+    assert legacy["apikey"] == "eyJhbGciOi.payload.sig"
