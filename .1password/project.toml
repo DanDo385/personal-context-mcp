@@ -8,11 +8,11 @@ account = "my.1password.com"
 vault = "Dev"
 run = "uv run personal-context-mcp"
 
-google_account = "djm385@gmail.com"   # OAuth client not created yet (Personal Context MCP > Google OAuth = REPLACE_ME)
+google_account = "dan@magro.dev"
 providers = ["supabase", "google", "typesafe", "anthropic", "vercel"]
 
 # Mirrors deploy/admin.env.op (PC_ENVIRONMENT=dev). Sources that are still REPLACE_ME in the vault
-# (Supabase URL/keys, Google OAuth) resolve to placeholders and are skipped as pending until filled.
+# resolve to placeholders and are skipped as pending until filled.
 [variables]
 PROJECT_NAME = "personal-context-mcp"
 APP_ENV = "development"
@@ -32,3 +32,5 @@ PC_ANTHROPIC_API_KEY = "op://Dev/e6vnwwousfa35l32gdwindqjke/credential"
 PC_DATABASE_URL = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/database_url_session"
 PC_SUPABASE_URL = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/supabase_url"
 PC_SUPABASE_SERVICE_KEY = "op://Dev/2c74cf4sfqsj3cey2q6peuhwkq/Supabase/supabase_service_key"
+PC_OAUTH_CLIENT_ID = "op://Dev/jkdm7r24acc7lhcxic2wv3s6he/oauth_personal_context_mcp/client_id"
+PC_OAUTH_CLIENT_SECRET = "op://Dev/jkdm7r24acc7lhcxic2wv3s6he/oauth_personal_context_mcp/client_secret"
