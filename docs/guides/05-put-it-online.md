@@ -56,6 +56,9 @@ exact address.
 This project already tells Vercel how to run it (`vercel.json` and `pyproject.toml`), so there's
 nothing to configure on the website.
 
+> **Shortcut:** once steps 1-3 are done, `deploy/go-live.sh .env` does steps 4 and 5 for you,
+> including the checks, and prints the address to use in your AI apps.
+
 ## Step 4: Give Vercel your settings
 
 ```bash

@@ -210,3 +210,26 @@ def test_high_entropy_server_id_is_part_of_the_resource_uri() -> None:
     settings = _settings(base_url="https://ctx.example.com", server_id="a1b2c3")
     assert settings.mcp_path == "/mcp/a1b2c3"
     assert settings.resource_url == "https://ctx.example.com/mcp/a1b2c3"
+
+
+def test_oauth_advertises_exactly_the_mcp_endpoint_as_its_resource() -> None:
+    """The protected-resource metadata must name the URL clients dial.
+    Regression: it used to say <base>/mcp/mcp."""
+    from personal_context_mcp.auth.provider import build_auth_provider
+    from personal_context_mcp.config import Settings
+
+    settings = Settings(
+        database_url="postgres://unused",
+        environment="prod",
+        base_url="https://memory.example.com",
+        auth_mode="google",
+        oauth_client_id="123.apps.googleusercontent.com",
+        oauth_client_secret="secret",
+        oauth_signing_key="k" * 64,
+        allowed_subjects=["me@example.com"],
+        classifier="rules",
+    )
+    provider = build_auth_provider(settings)
+    assert provider is not None
+    assert str(provider._get_resource_url(settings.mcp_path)) == "https://memory.example.com/mcp"
+    assert settings.resource_url == "https://memory.example.com/mcp"
