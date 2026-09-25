@@ -243,8 +243,12 @@ def build_auth_provider(
         "client_id": settings.oauth_client_id,
         "client_secret": settings.oauth_client_secret.get_secret_value(),
         "base_url": str(settings.base_url),
-        # RFC 8707: the audience clients must request and we must validate.
-        "resource_base_url": settings.resource_url,
+        # RFC 8707/9728: the protected resource is <base>/mcp. FastMCP appends
+        # the mount path itself, so it must be given the base, not the full
+        # resource URL - passing resource_url advertised "<base>/mcp/mcp",
+        # which clients that check the resource against the URL they dialled
+        # (Claude does) refuse.
+        "resource_base_url": str(settings.base_url),
         "client_storage": client_storage,
         "require_authorization_consent": True,
     }
