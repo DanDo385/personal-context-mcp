@@ -157,3 +157,31 @@ def test_supabase_auth_headers_suit_both_key_styles() -> None:
     legacy = auth_headers("eyJhbGciOi.payload.sig")
     assert legacy["Authorization"] == "Bearer eyJhbGciOi.payload.sig"
     assert legacy["apikey"] == "eyJhbGciOi.payload.sig"
+
+
+async def test_ensure_buckets_creates_when_supabase_answers_400_not_found() -> None:
+    import httpx
+
+    from personal_context_mcp.storage.supabase import SupabaseObjectStore
+
+    created: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                400,
+                json={"statusCode": "404", "error": "Bucket not found", "code": "NoSuchBucket"},
+            )
+        created.append(request.read().decode())
+        return httpx.Response(200, json={"name": "x"})
+
+    store = SupabaseObjectStore(
+        supabase_url="https://example.supabase.co",
+        service_key="sb_secret_test",
+        bucket="primary",
+        archive_bucket="archive",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    await store.ensure_buckets()
+    assert len(created) == 2
+    assert all('"public": false' in body or '"public":false' in body for body in created)

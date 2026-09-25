@@ -22,6 +22,21 @@ from personal_context_mcp.util import sha256_bytes
 logger = get_logger(__name__)
 
 
+def _bucket_missing(response: httpx.Response) -> bool:
+    """Supabase Storage reports a missing bucket as HTTP 400 with a 404 in the
+    body (``{"statusCode": "404", "error": "Bucket not found"}``); older
+    versions used a plain HTTP 404. Accept both."""
+    if response.status_code == 404:
+        return True
+    if response.status_code != 400:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return str(body.get("statusCode")) == "404" or body.get("code") == "NoSuchBucket"
+
+
 def auth_headers(service_key: str) -> dict[str, str]:
     """Supabase accepts two kinds of secret key. The legacy ``service_role``
     key is a JWT and goes in both headers. The newer ``sb_secret_...`` keys
@@ -73,7 +88,7 @@ class SupabaseObjectStore:
                         "conversation artifacts; make the bucket private before starting."
                     )
                 continue
-            if response.status_code != 404:
+            if not _bucket_missing(response):
                 self._raise(response, f"inspect bucket {name}")
 
             created = await self._client.post(
