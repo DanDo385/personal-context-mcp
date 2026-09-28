@@ -8,7 +8,7 @@
 | Saved files (charts, PDFs, code) | Your Supabase Storage, in private buckets | You; the apps get short-lived download links |
 | Your original export `.zip` files | A separate private bucket, optional | You |
 | Notes | Your Obsidian folder, on your computer (and iCloud, if you put it there) | You |
-| Your server's settings and secrets | Your `.env` file or 1Password, and Vercel's encrypted settings | You |
+| Your server's settings and secrets | Your `.env.local` file or 1Password, and Vercel's encrypted settings | You |
 
 There's no central service run by the authors of this project, nothing is collected about you, and
 there's no telemetry.

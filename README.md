@@ -97,8 +97,12 @@ The quickest possible start, if you already have the tools:
 git clone https://github.com/DanDo385/personal-context-mcp.git
 cd personal-context-mcp
 uv sync
-uv run personal-context-mcp init      # answers a few questions and writes your settings
+uv run personal-context-mcp init      # answers a few questions and writes your settings to .env.local
 ```
+
+**Where your settings go:** everything personal (addresses, keys, passwords) lives in one file,
+`.env.local`, in the project folder. It's never uploaded to GitHub. `init` writes it for you; to
+fill it in by hand, start from [`.env.local.example`](.env.local.example).
 
 Stuck? Try [Troubleshooting](docs/troubleshooting.md), then the [FAQ](docs/faq.md). Words you don't
 know are explained in the [Glossary](docs/glossary.md).

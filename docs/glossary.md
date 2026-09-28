@@ -13,7 +13,7 @@ Plain-language meanings for the words used in these docs.
 | **Connector / custom app** | An outside tool you add to an AI app. Your server is one. |
 | **Deploy** | Put your server on the internet (here: on Vercel). |
 | **Environment (1Password)** | A named set of settings for one project, kept in 1Password instead of a file. |
-| **`.env` file** | A text file of settings (`NAME=value` per line) in the project folder. Holds secrets; never share or upload it. |
+| **`.env.local` file** | The text file holding *your* settings (`NAME=value` per line) in the project folder. Holds secrets; never share or upload it. Start from `.env.local.example`, or let `init` write it. |
 | **Export** | A download of your data from an app, usually a `.zip`. |
 | **Git / GitHub / clone** | Git downloads and tracks code; GitHub hosts it; "clone" means download a copy. |
 | **Jev (TypeSafe)** | An AI service built for answering yes/no and multiple-choice questions very cheaply. Used to sort your old chats and decide which notes to link. It doesn't write text. |

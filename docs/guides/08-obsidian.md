@@ -15,7 +15,7 @@ computer: the helper only ever calls out.
   (Obsidian must be installed on the Mac for that folder to exist.)
 - **Otherwise:** anywhere, for example `~/Obsidian/Personal Context`.
 
-Open your `.env` and set:
+Open your `.env.local` and set:
 
 ```
 OBSIDIAN_SYNC_VAULT_PATH=~/Obsidian/Personal Context
@@ -102,7 +102,7 @@ Ticking a checkbox in a list note (`- [x]`) marks that item done everywhere.
 | You see | Fix |
 | --- | --- |
 | `Vault directory does not exist` | Create the folder (step 1), or fix `OBSIDIAN_SYNC_VAULT_PATH`. |
-| `worker rejected: check OBSIDIAN_SYNC_API_KEY matches` | The helper's key differs from the server's `PC_WORKER_API_KEY`. They must be identical; after changing the server's, run `deploy/vercel-env.sh .env` and `vercel deploy --prod`. |
+| `worker rejected: check OBSIDIAN_SYNC_API_KEY matches` | The helper's key differs from the server's `PC_WORKER_API_KEY`. They must be identical; after changing the server's, run `deploy/vercel-env.sh .env.local` and `vercel deploy --prod`. |
 | Notes never appear | Your AI apps may not have saved any notes yet. Ask one to "save this research to Obsidian". Also check the log: `tail -f ~/Library/Logs/personal-context-mcp/obsidian-sync.err.log`. |
 
 **Next:** [9. Import your old chats](09-import-your-history.md)

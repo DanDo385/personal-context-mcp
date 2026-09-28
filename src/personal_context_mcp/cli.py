@@ -64,7 +64,7 @@ def main() -> None:
 @click.option(
     "--output",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path(".env"),
+    default=Path(".env.local"),
     show_default=True,
     help="Where to write the settings file.",
 )

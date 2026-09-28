@@ -46,7 +46,7 @@ are grouped by day. Grok's may lack generated images. Files an export only *name
 
 ## Step 2: Choose your privacy level
 
-Open `.env` and decide (both lines can be left out, which uses the defaults shown):
+Open `.env.local` and decide (both lines can be left out, which uses the defaults shown):
 
 ```
 # Every imported chat starts at least this private. The screen can only raise it.
@@ -111,7 +111,7 @@ the titles of the first twenty. When you're happy:
 uv run personal-context-mcp extract --limit 50        # start small, then raise the limit
 ```
 
-To reduce cost, set `PC_EXTRACTION_MODEL=claude-sonnet-5` in `.env` (cheaper, still good), or raise
+To reduce cost, set `PC_EXTRACTION_MODEL=claude-sonnet-5` in `.env.local` (cheaper, still good), or raise
 `--min-importance` (default 0.5) to only read the most important conversations.
 
 Old to-dos found in old chats are kept as context ("Unfinished at the time: ...") rather than added to
@@ -136,7 +136,7 @@ the close reading wrote is kept.
 | --- | --- |
 | `Could not identify which provider produced this archive` | Name the app explicitly: `import chatgpt file.zip`. For Gemini, check you chose JSON (step 1). |
 | `This exact archive has already been imported` | Nothing to do; it's safe. |
-| `extract` says *Set PC_EXTRACTION_PROVIDER=anthropic* | Add `PC_EXTRACTION_PROVIDER=anthropic` and your `PC_ANTHROPIC_API_KEY` to `.env`. |
+| `extract` says *Set PC_EXTRACTION_PROVIDER=anthropic* | Add `PC_EXTRACTION_PROVIDER=anthropic` and your `PC_ANTHROPIC_API_KEY` to `.env.local`. |
 | Lots of *classifier_degraded* in the report | TypeSafe was unreachable; the built-in rules were used instead and those conversations are queued. Run `uv run personal-context-mcp reclassify` later. |
 
 **Next:** [10. Build your wiki](10-build-your-wiki.md)

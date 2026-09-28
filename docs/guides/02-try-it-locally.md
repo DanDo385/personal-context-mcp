@@ -37,8 +37,8 @@ It asks a few questions. For this test:
 | TypeSafe key / Anthropic key | press **Enter** to skip |
 | Obsidian vault | press **Enter** |
 
-✅ It prints `Wrote .env (readable only by you)` and **a long test access token**. Copy the token
-somewhere for a few minutes; you'll need it in step 5. It's also saved in `.env` (the line starting
+✅ It prints `Wrote .env.local (readable only by you)` and **a long test access token**. Copy the token
+somewhere for a few minutes; you'll need it in step 5. It's also saved in `.env.local` (the line starting
 `PC_STATIC_TOKENS`).
 
 ## Step 3: Create the tables and check everything
@@ -103,7 +103,7 @@ A browser tab opens. Set **Transport** to *Streamable HTTP* and **URL** to
 ## What to do next
 
 - Happy? Stop the server (Ctrl-C) and go on to [3. Create your Google sign-in](03-google-sign-in.md).
-  When you run `init` again for the online setup, it will refuse to overwrite this `.env`. Either
-  rename the old one (`mv .env .env.local-test`) or pass `--force`.
+  When you run `init` again for the online setup, it will refuse to overwrite this `.env.local`. Either
+  rename the old one (`mv .env.local .env.local-test`) or pass `--force`.
 - Something went wrong? See [Troubleshooting](../troubleshooting.md). The most common issue is that
   Docker Desktop isn't running (`Cannot connect to the Docker daemon`).

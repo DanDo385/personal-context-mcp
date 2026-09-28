@@ -61,7 +61,7 @@ Choose `online`, and paste the three values when asked:
 | Service role key | the key from step 3 |
 
 (It also asks for your server's address and the Google client from [guide 3](03-google-sign-in.md).
-Both can be left blank and filled into `.env` later.)
+Both can be left blank and filled into `.env.local` later.)
 
 ## Step 5: Create the tables and check
 

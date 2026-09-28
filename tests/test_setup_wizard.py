@@ -80,3 +80,29 @@ def test_init_writes_a_private_file_and_refuses_to_overwrite(tmp_path: Path) -> 
     again = runner.invoke(main, ["init", "--output", str(output)], input=answers)
     assert again.exit_code != 0
     assert "already exists" in again.output
+
+
+def test_env_local_overrides_env(tmp_path: Path, monkeypatch) -> None:
+    """Settings load .env, then .env.local on top; a real environment variable beats both."""
+    monkeypatch.chdir(tmp_path)
+    for name in ("PC_BASE_URL", "PC_LOG_LEVEL", "PC_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text(
+        "PC_DATABASE_URL=postgres://from-env\nPC_BASE_URL=http://from-env\nPC_LOG_LEVEL=DEBUG\n"
+    )
+    (tmp_path / ".env.local").write_text("PC_BASE_URL=https://from-env-local\n")
+
+    settings = Settings()
+    assert str(settings.base_url).rstrip("/") == "https://from-env-local"
+    assert settings.log_level == "DEBUG"  # only in .env, still read
+
+    monkeypatch.setenv("PC_BASE_URL", "https://from-process")
+    assert str(Settings().base_url).rstrip("/") == "https://from-process"
+
+
+def test_init_writes_env_local_by_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(main, ["init"], input="local\nme@example.com\n\n\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".env.local").exists()
+    assert not (tmp_path / ".env").exists()

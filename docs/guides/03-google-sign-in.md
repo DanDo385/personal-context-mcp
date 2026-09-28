@@ -66,7 +66,7 @@ secret once. If you lose it, just add a new secret to the same client.
 ## Where to put them
 
 - **Using the setup wizard:** paste them when `uv run personal-context-mcp init` asks (choose
-  `online`). Or, if you already have a `.env`, open it in a text editor and fill in
+  `online`). Or, if you already have a `.env.local`, open it in a text editor and fill in
   `PC_OAUTH_CLIENT_ID=` and `PC_OAUTH_CLIENT_SECRET=`.
 - **Using 1Password:** see [guide 7](07-keep-secrets-in-1password.md).
 

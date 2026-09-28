@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.local.example
 *.pem
 *.key
 service-account*.json
@@ -35,6 +36,8 @@ exports/
 .DS_Store
 .vercel
 .env*
+!.env.example
+!.env.local.example
 _uv/
 
 # Personal deployment config: copy the matching *.example and fill it in.

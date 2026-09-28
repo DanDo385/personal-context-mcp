@@ -18,8 +18,8 @@ uv run personal-context-mcp init
 ```
 
 Choose **online**. When it asks for your address, use the one you'll have after step 3, for example
-`https://personal-context-mcp.vercel.app`. (If your `.env` from the local test is in the way, rename
-it first with `mv .env .env.local-test`.)
+`https://personal-context-mcp.vercel.app`. (If your `.env.local` from the local test is in the way, rename
+it first with `mv .env.local .env.local-test`.)
 
 ✅ Then:
 
@@ -50,22 +50,22 @@ vercel link --yes --project personal-context-mcp
 ✅ It says `Linked to <your-name>/personal-context-mcp`. The name decides your free address: a project
 called `personal-context-mcp` gets `https://personal-context-mcp.vercel.app` if that name is free.
 If it's taken, Vercel adds a suffix; check the real address under **Domains** in the project's page on
-vercel.com. Then make sure `PC_BASE_URL` in `.env` and the redirect URI in Google (guide 3) use that
+vercel.com. Then make sure `PC_BASE_URL` in `.env.local` and the redirect URI in Google (guide 3) use that
 exact address.
 
 This project already tells Vercel how to run it (`vercel.json` and `pyproject.toml`), so there's
 nothing to configure on the website.
 
-> **Shortcut:** once steps 1-3 are done, `deploy/go-live.sh .env` does steps 4 and 5 for you,
+> **Shortcut:** once steps 1-3 are done, `deploy/go-live.sh .env.local` does steps 4 and 5 for you,
 > including the checks, and prints the address to use in your AI apps.
 
 ## Step 4: Give Vercel your settings
 
 ```bash
-deploy/vercel-env.sh .env
+deploy/vercel-env.sh .env.local
 ```
 
-It copies each setting from your `.env` into Vercel's *Production* environment, one at a time, marking
+It copies each setting from your `.env.local` into Vercel's *Production* environment, one at a time, marking
 passwords and keys as *sensitive* so the Vercel website never shows them. (Settings for the Obsidian
 helper stay on your computer.)
 
@@ -105,8 +105,8 @@ If you own a domain, you can use an address like `https://memory.yourname.com`:
 2. At your domain's DNS provider, add a **CNAME** record: name `memory`, value `cname.vercel-dns.com`.
    On Cloudflare, set it to **DNS only** (grey cloud): Cloudflare's proxy can break the live
    connection the AI apps use.
-3. Change `PC_BASE_URL` and `PC_ALLOWED_HOSTS` in `.env` to the new address, run
-   `deploy/vercel-env.sh .env` again, and add `https://memory.yourname.com/auth/callback` to your
+3. Change `PC_BASE_URL` and `PC_ALLOWED_HOSTS` in `.env.local` to the new address, run
+   `deploy/vercel-env.sh .env.local` again, and add `https://memory.yourname.com/auth/callback` to your
    Google client's redirect URIs.
 4. `vercel deploy --prod`.
 
@@ -138,7 +138,7 @@ Cloud Run. Whatever you choose, it needs a public **https** address.
 | You see | Fix |
 | --- | --- |
 | `/healthz` shows a Vercel login page | Step 5: `vercel project protection disable personal-context-mcp --sso`. |
-| `/healthz` shows `500` or *This Serverless Function has crashed* | A setting is missing or wrong. Run `uv run personal-context-mcp check` locally, which lists every problem at once; fix `.env`, re-run `deploy/vercel-env.sh .env`, then `vercel deploy --prod`. On the website, **Logs** shows what happened. |
+| `/healthz` shows `500` or *This Serverless Function has crashed* | A setting is missing or wrong. Run `uv run personal-context-mcp check` locally, which lists every problem at once; fix `.env.local`, re-run `deploy/vercel-env.sh .env.local`, then `vercel deploy --prod`. On the website, **Logs** shows what happened. |
 | `Refusing to start ... PC_BASE_URL must be https://` | `PC_BASE_URL` still says `http://localhost...`. |
 | The build log says *Failed to open file README.md* | You're on an old copy. Run `git pull`. |
 
