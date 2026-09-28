@@ -4,7 +4,7 @@
 #
 # Settings come from, in order:
 #   deploy/worker.env.op   op:// references, read from 1Password when it starts
-#   .env                   plain settings written by `personal-context-mcp init`
+#   .env.local             plain settings written by `personal-context-mcp init`
 # Linux: see docs/guides/08-obsidian.md for the systemd equivalent.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,7 +20,7 @@ if [[ -z "$ENV_FILE" && -f deploy/worker.env.op ]]; then ENV_FILE=deploy/worker.
 if [[ -n "$ENV_FILE" ]]; then
   command -v op >/dev/null || { echo "$ENV_FILE needs the 1Password CLI (op)." >&2; exit 1; }
   COMMAND="exec op run --env-file=$ENV_FILE -- .venv/bin/obsidian-sync run"
-elif [[ -f .env ]]; then
+elif [[ -f .env.local || -f .env ]]; then
   COMMAND="exec .venv/bin/obsidian-sync run"
 else
   echo "No settings found. Run: uv run personal-context-mcp init" >&2

@@ -1,6 +1,6 @@
 # 7. Keep your secrets in 1Password (optional)
 
-The setup wizard keeps your secrets in a `.env` file on your computer, readable only by your user.
+The setup wizard keeps your secrets in a `.env.local` file on your computer, readable only by your user.
 That's fine for most people. If you use [1Password](https://1password.com), you can go one better: no
 secret ever sits in a file, and every secret is in the same place as your other passwords.
 
@@ -8,7 +8,7 @@ There are two ways. **Choose one.**
 
 | | A. Environments (recommended) | B. Secret references (`op://`) |
 | --- | --- | --- |
-| How it works | 1Password pretends to be your `.env` file. The project reads it as usual, but nothing is stored on disk. | Files list *where* each secret lives in 1Password; the `op` command fills them in when a command runs. |
+| How it works | 1Password pretends to be your `.env.local` file. The project reads it as usual, but nothing is stored on disk. | Files list *where* each secret lives in 1Password; the `op` command fills them in when a command runs. |
 | Setup effort | Low: a few clicks, or ask Claude Code to do it | Medium |
 | Works when 1Password is locked | No | Yes, with a service account |
 | Platforms | Mac, Linux | Mac, Linux, Windows (WSL) |
@@ -16,7 +16,7 @@ There are two ways. **Choose one.**
 ## A. 1Password Environments (recommended)
 
 A 1Password *Environment* is a set of settings for one project. 1Password can "mount" it at the path of
-your `.env` file. The file then reads normally, but its contents come straight from 1Password and are
+your `.env.local` file. The file then reads normally, but its contents come straight from 1Password and are
 never written to your disk.
 
 ### With Claude Code (easiest)
@@ -33,23 +33,23 @@ never written to your disk.
    **1Password** as connected.
 3. In this project folder, ask Claude Code:
 
-   > Import .env into a 1Password Environment called personal-context-mcp and mount it here.
+   > Import .env.local into a 1Password Environment called personal-context-mcp and mount it here.
 
    1Password asks you to approve. Claude creates the Environment, marks keys and passwords as concealed,
-   and mounts it at `.env`. The plugin never shows secret values to the AI, only the variable names.
+   and mounts it at `.env.local`. The plugin never shows secret values to the AI, only the variable names.
 
 ### By hand
 
 1. In the 1Password desktop app: **Developer → Environments → New environment**, name it
    `personal-context-mcp`.
-2. **Import** your existing `.env` file (or add each variable).
-3. **Destinations → Local .env file**, and choose this project's `.env` path.
+2. **Import** your existing `.env.local` file (or add each variable).
+3. **Destinations → Local .env.local file**, and choose this project's `.env.local` path.
 4. Delete the old plaintext copy if 1Password didn't replace it.
 
 ### Afterwards
 
-Everything keeps working unchanged (`uv run personal-context-mcp ...`, `deploy/vercel-env.sh .env`),
-because the project still reads `.env`. 1Password may ask you to approve access the first time.
+Everything keeps working unchanged (`uv run personal-context-mcp ...`, `deploy/vercel-env.sh .env.local`),
+because the project still reads `.env.local`. 1Password may ask you to approve access the first time.
 
 > **Rotate what used to be in plain text.** Moving secrets into 1Password protects them from now on,
 > but a copy may still exist in backups. When convenient, create a new Google client secret, a new
@@ -64,7 +64,7 @@ only while a command runs.
 
 1. Install and sign in to `op` (its getting-started guide takes five minutes). Check with `op whoami`.
 2. Create one 1Password item, for example *Personal Context*, with three sections, `Server`,
-   `Google OAuth` and `Supabase`, holding the values from your `.env`. Tip: reference the item by its
+   `Google OAuth` and `Supabase`, holding the values from your `.env.local`. Tip: reference the item by its
    **id** (from `op item get "Personal Context" --format json`), so renaming it never breaks anything.
 3. Copy the templates and replace `<vault>` and `<item-id>`:
 

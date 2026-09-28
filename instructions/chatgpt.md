@@ -25,6 +25,12 @@ the server is put online (docs/guides/05-put-it-online.md) rather than run local
 **Settings → Personalization → Custom instructions**, into "Anything else
 ChatGPT should know". Paste the block from `instructions/shared.md`.
 
+## Turn off built-in memory (recommended)
+
+Export your history first ([docs/guides/09-import-your-history.md](../docs/guides/09-import-your-history.md)), then:
+Settings → **Personalization → Memory**: turn off *Reference saved memories* and *Reference chat history*. Custom instructions stay on.
+Personal Context then becomes this app's only long-term memory, shared with the other three.
+
 ## 4. Skills / plugin packaging
 
 If your account has account-level Skills, upload the directories under

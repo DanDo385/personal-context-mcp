@@ -36,7 +36,7 @@ You don't need to understand these deeply; the guides tell you exactly what to d
 | **Connector** | What the AI apps call an MCP server you add to them ("custom connector", "custom app"). |
 | **Terminal** | The text window where you type commands. On a Mac: press ⌘-Space, type *Terminal*, press Enter. |
 | **Repository / repo** | This project's folder of code, downloaded to your computer with `git clone`. |
-| **`.env` file** | A small text file holding your settings and secrets. It stays on your computer and is never uploaded to GitHub. |
+| **`.env.local` file** | A small text file holding your settings and secrets. It stays on your computer and is never uploaded to GitHub. |
 | **OAuth / "sign-in app"** | The "Sign in with Google" button. You create a free Google sign-in app so the AI apps can prove it's you. |
 | **Deploy** | Put your server on the internet. |
 
@@ -46,7 +46,7 @@ You don't need to understand these deeply; the guides tell you exactly what to d
    ([guide 2](02-try-it-locally.md)) takes ten minutes and proves everything works before you create
    any accounts. The phone apps can't reach a server on your computer, so you'll go online afterwards
    anyway.
-2. **Where to keep your secrets.** The simple way is the `.env` file the setup wizard writes. If you
+2. **Where to keep your secrets.** The simple way is the `.env.local` file the setup wizard writes. If you
    already use 1Password, [guide 7](07-keep-secrets-in-1password.md) shows how to keep every secret
    there instead, so no password is ever stored in a file.
 3. **Whether to import your old chats.** It's optional and can be done any time later

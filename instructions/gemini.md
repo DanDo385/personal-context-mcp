@@ -43,6 +43,12 @@ same context. Workflow guidance reaches Gemini three ways instead:
    `manage_lists`) and the `personal-context-mcp://guide/<name>` resources, which
    serve the full text of each skill on demand
 
+## Turn off built-in memory (recommended)
+
+Export your history first ([docs/guides/09-import-your-history.md](../docs/guides/09-import-your-history.md)), then:
+Settings & help → **Personal context** (or **Past chats**): turn off *Your past chats with Gemini*. **Keep Gemini Apps Activity / Keep Activity on**: custom apps are unavailable without it.
+Personal Context then becomes this app's only long-term memory, shared with the other three.
+
 ## 4. Surfaces and limitations
 
 | | |

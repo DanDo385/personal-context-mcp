@@ -4,11 +4,11 @@
 #   deploy/vercel-env.sh [SETTINGS_FILE]
 #
 # SETTINGS_FILE is either
-#   - a plain file of NAME=value lines (for example one written by
-#     `personal-context-mcp init --output .env.production`), or
+#   - a plain file of NAME=value lines (for example the .env.local written by
+#     `personal-context-mcp init`), or
 #   - a file of op:// references (deploy/production.env.op), resolved by the
 #     1Password CLI at run time so no secret is ever written to disk.
-# Default: deploy/production.env.op if it exists, otherwise .env.production.
+# Default: deploy/production.env.op if it exists, otherwise .env.local.
 #
 # Each value is handed to the Vercel CLI on stdin, so none shows up in your
 # shell history or in the process list.
@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 
 FILE="${1:-}"
 if [[ -z "$FILE" ]]; then
-  if [[ -f deploy/production.env.op ]]; then FILE=deploy/production.env.op; else FILE=.env.production; fi
+  if [[ -f deploy/production.env.op ]]; then FILE=deploy/production.env.op; else FILE=.env.local; fi
 fi
 [[ -f "$FILE" ]] || { echo "No settings file at $FILE. See docs/guides/05-put-it-online.md." >&2; exit 1; }
 PROJECT="${PC_VERCEL_PROJECT:-personal-context-mcp}"

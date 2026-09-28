@@ -43,6 +43,12 @@ claude plugin marketplace add typesafe-ai/skills
 claude plugin install typesafe@typesafe-ai
 ```
 
+## Turn off built-in memory (recommended)
+
+Export your history first ([docs/guides/09-import-your-history.md](../docs/guides/09-import-your-history.md)), then:
+Settings → **Capabilities** (or **Memory**): turn off *Generate memory from chat history* and *Search and reference chats*. Keep the Personal Context connector enabled.
+Personal Context then becomes this app's only long-term memory, shared with the other three.
+
 ## 4. Surfaces and limitations
 
 | | |

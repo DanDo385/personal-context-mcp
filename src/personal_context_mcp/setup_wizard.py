@@ -1,4 +1,4 @@
-"""``personal-context-mcp init``: write a working ``.env`` by answering questions.
+"""``personal-context-mcp init``: write a working ``.env.local`` by answering questions.
 
 Aimed at someone who has never configured a server. It asks only what it
 cannot work out, generates every secret itself, explains each answer in plain
@@ -44,7 +44,7 @@ def _host(base_url: str) -> str:
 
 
 def build_env(answers: Answers) -> str:
-    """Render a complete, commented ``.env`` for the given answers."""
+    """Render a complete, commented ``.env.local`` for the given answers."""
     worker_key = _token()
     signing_key = _token()
     answers.generated = {"worker_api_key": worker_key}
@@ -52,7 +52,7 @@ def build_env(answers: Answers) -> str:
     lines: list[str] = [
         "# personal-context-mcp settings, written by `personal-context-mcp init`.",
         "# This file holds secrets. Never commit it, never paste it anywhere.",
-        "# Every setting is explained in .env.example.",
+        "# Every setting is explained in .env.example. This file is never committed.",
         "",
         "# ---- Where it runs",
         f"PC_ENVIRONMENT={'prod' if online else 'dev'}",
@@ -137,7 +137,7 @@ def next_steps(answers: Answers) -> list[str]:
     else:
         if answers.auth != "static" and not answers.oauth_client_id:
             steps.append(
-                "Create your sign-in app and paste its id and secret into .env:"
+                "Create your sign-in app and paste its id and secret into .env.local:"
                 "  docs/guides/03-google-sign-in.md"
             )
         steps += [

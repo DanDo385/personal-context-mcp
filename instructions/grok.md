@@ -30,6 +30,12 @@ portable Markdown and can be used directly. Where it does not, the MCP tool
 descriptions and the `personal-context-mcp://guide/<name>` resources carry the
 same guidance.
 
+## Turn off built-in memory (recommended)
+
+Export your history first ([docs/guides/09-import-your-history.md](../docs/guides/09-import-your-history.md)), then:
+Settings → **Customize** or **Data controls**: turn off *Memory* / *Personalize with memories*.
+Personal Context then becomes this app's only long-term memory, shared with the other three.
+
 ## 4. Surfaces and limitations
 
 | | |

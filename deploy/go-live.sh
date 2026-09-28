@@ -3,8 +3,8 @@
 #   preflight -> migrate -> check -> push settings to Vercel -> deploy -> health check
 #
 #   deploy/go-live.sh            uses deploy/admin.env.op + deploy/production.env.op (1Password)
-#                                if they exist, otherwise .env for everything
-#   deploy/go-live.sh .env       use one plain settings file for everything
+#                                if they exist, otherwise .env.local for everything
+#   deploy/go-live.sh .env.local use one plain settings file for everything
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ -f deploy/local.env ]] && source deploy/local.env
@@ -16,7 +16,7 @@ if [[ -z "$PLAIN" && -f deploy/admin.env.op && -f deploy/production.env.op ]]; t
   URL="$(op run --no-masking --env-file=deploy/production.env.op -- printenv PC_BASE_URL)"  # not a secret
   deploy/preflight.sh
 else
-  PLAIN="${PLAIN:-.env}"
+  PLAIN="${PLAIN:-.env.local}"
   [[ -f "$PLAIN" ]] || { echo "No settings at $PLAIN. Run: uv run personal-context-mcp init" >&2; exit 1; }
   run() { "$@"; }
   PRODUCTION="$PLAIN"

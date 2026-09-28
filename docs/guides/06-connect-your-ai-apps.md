@@ -27,6 +27,30 @@ answering questions about your past work, and to save what gets decided.
 The menus in these apps move around every few months. If a menu name doesn't match, look for
 "Connectors", "Apps" or "Integrations" in the settings, and check the full guide for the latest notes.
 
+## Recommended: turn off each app's built-in memory
+
+Each app also keeps its own private memory of you. Left on, it competes with Personal Context: an
+app may answer from its own stale notes instead of checking the shared record, and the four apps drift
+apart. With it off, every app gets its memory from the same place.
+
+**First, download your history** from each app ([guide 9](09-import-your-history.md), step 1), so
+nothing is lost. Turning memory off doesn't delete your chats, but the export is what gets your past
+conversations into Personal Context.
+
+| App | Where | Turn **off** | Keep **on** |
+| --- | --- | --- | --- |
+| **Claude** | **Settings → Capabilities** (or **Settings → Memory**) | *Generate memory from chat history* and *Search and reference chats* | the Personal Context connector |
+| **ChatGPT** | **Settings → Personalization → Memory** | *Reference saved memories* and *Reference chat history* | Custom instructions |
+| **Gemini** | **Settings & help → Personal context** (sometimes **Past chats**) | *Your past chats with Gemini* | **Gemini Apps Activity / Keep Activity**: custom apps stop working without it. Also keep Saved info, where your instruction lives. |
+| **Grok** | **Settings → Customize** or **Data controls** | *Memory* / *Personalize with memories* | Custom instructions |
+
+Optional: each app also has a switch that allows your chats to be used to train its models (Claude:
+**Privacy → Help improve Claude**; ChatGPT: **Data controls → Improve the model for everyone**;
+Grok: **Data controls → Improve the model**; Gemini: tied to Keep Activity, so leave it on). Turning
+it off doesn't affect Personal Context.
+
+Menu names change often. If one doesn't match, search the app's settings for "memory" or "past chats".
+
 ## Check that it worked
 
 In each app, start a new chat and try:
