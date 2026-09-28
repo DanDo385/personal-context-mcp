@@ -94,6 +94,13 @@ def build_mcp(settings: Settings) -> FastMCP:
 
 #: Added to every response. The OAuth consent screen is the only HTML this
 #: service serves, and it needs no scripts, frames or third-party anything.
+#:
+#: Deliberately no ``form-action``: browsers apply it to every redirect that
+#: follows a form submission, and approving the consent form redirects to the
+#: identity provider (accounts.google.com). ``form-action 'self'`` made the
+#: browser block that redirect, stranding the user on /consent with the
+#: single-use approval already spent. The form's target is server-generated,
+#: so the directive added nothing.
 _SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"no-referrer"),
@@ -101,8 +108,7 @@ _SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
     (
         b"content-security-policy",
-        b"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "
-        b"frame-ancestors 'none'; base-uri 'none'",
+        b"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
     ),
 )
 

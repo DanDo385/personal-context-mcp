@@ -48,6 +48,7 @@ Find what you're seeing below. Each guide also ends with a table for its own ste
 | *has not completed the Google verification process* | The Google sign-in app is still in Testing. | Publish it ([guide 3](guides/03-google-sign-in.md), step 3). |
 | Sign-in succeeds, then *access denied* | That Google account isn't allowed. | Add its email to `PC_ALLOWED_SUBJECTS`, push settings, redeploy. |
 | Connected, but no tools show up | The app didn't finish setting up the connector. | Remove and re-add the connector; reload the page. |
+| *Invalid or expired consent token*, or Approve leaves you on the `/consent` page | The approval page is single-use: it was already submitted, left open over 15 minutes, or (before the fix in this version) the browser blocked the hand-off to Google. | Close the sign-in window, then click **Connect** in the app again for a fresh page; click Approve once. If it persists, run `git pull` and redeploy. |
 | Worked for a week, then asks to sign in again | The Google app is in Testing (7-day limit). | Publish it. |
 | Gemini's *Custom apps* option or the connector disappeared | *Gemini Apps Activity / Keep Activity* was turned off. | Turn it back on; custom apps need it. You can still turn off *past chats*. |
 | The app never uses its memory unprompted | The custom instruction is missing. | Paste [instructions/shared.md](../instructions/shared.md) into the app's settings. |

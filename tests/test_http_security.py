@@ -133,6 +133,15 @@ async def test_security_headers_are_present(client) -> None:
     assert response.headers["x-request-id"]
 
 
+async def test_csp_does_not_block_the_consent_redirect(client) -> None:
+    """Approving consent redirects to the identity provider. Browsers apply
+    form-action to that redirect, so a form-action directive strands the user
+    on /consent. Regression: 'form-action self' did exactly that."""
+    http_client, _ = client
+    response = await http_client.get("/")
+    assert "form-action" not in response.headers["content-security-policy"]
+
+
 async def test_signed_local_download_rejects_a_forged_signature(client) -> None:
     http_client, _ = client
     response = await http_client.get(
