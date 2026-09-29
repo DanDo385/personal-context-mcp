@@ -233,3 +233,57 @@ def test_oauth_advertises_exactly_the_mcp_endpoint_as_its_resource() -> None:
     assert provider is not None
     assert str(provider._get_resource_url(settings.mcp_path)) == "https://memory.example.com/mcp"
     assert settings.resource_url == "https://memory.example.com/mcp"
+
+
+async def test_google_tokens_keep_the_scopes_fastmcp_requires() -> None:
+    """Regression: the policy replaced the token's scopes with capability
+    scopes, so FastMCP's required-scope check (openid, userinfo.email) refused
+    every Google sign-in after a successful login."""
+    from mcp.server.auth.provider import AccessToken
+
+    from personal_context_mcp.auth.provider import build_auth_provider
+    from personal_context_mcp.config import Settings
+
+    settings = Settings(
+        database_url="postgres://unused",
+        environment="prod",
+        base_url="https://memory.example.com",
+        auth_mode="google",
+        oauth_client_id="123.apps.googleusercontent.com",
+        oauth_client_secret="secret",
+        oauth_signing_key="k" * 64,
+        allowed_subjects=["me@example.com"],
+        client_scope_policy={"*": ["*"]},
+        classifier="rules",
+    )
+    provider = build_auth_provider(settings)
+    assert provider is not None and provider.required_scopes
+    upstream = AccessToken(
+        token="t",
+        client_id="google-user-id",
+        scopes=list(provider.required_scopes),
+        claims={"email": "me@example.com", "sub": "google-user-id"},
+    )
+
+    result = await provider._apply_policy(upstream)  # type: ignore[attr-defined]
+
+    assert result is not None
+    assert set(provider.required_scopes) <= set(result.scopes)
+    assert "memory:read" in result.scopes
+
+    # A capability scope the token claims for itself is still not honoured
+    # unless the server-side policy grants it.
+    from personal_context_mcp.auth.scopes import ALL_SCOPES
+
+    narrow = build_auth_provider(
+        settings.model_copy(update={"client_scope_policy": {"*": ["read"]}})
+    )
+    assert narrow is not None
+    claimed = upstream.model_copy(update={"scopes": [*upstream.scopes, *ALL_SCOPES]})
+    restricted = await narrow._apply_policy(claimed)  # type: ignore[attr-defined]
+    assert restricted is not None
+    assert "memory:write" not in restricted.scopes
+    assert set(provider.required_scopes) <= set(restricted.scopes)
+
+    stranger = upstream.model_copy(update={"claims": {"email": "someone@else.com"}})
+    assert await provider._apply_policy(stranger) is None  # type: ignore[attr-defined]

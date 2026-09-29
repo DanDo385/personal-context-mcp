@@ -110,8 +110,15 @@ class _PolicyMixin:
         claims["pc_provider"] = provider_from_client(client_name, client_id)
         claims["pc_upstream_scopes"] = list(token.scopes)
 
+        # Capability scopes come only from the server-side policy; any the
+        # token itself claims are discarded. Identity scopes (openid,
+        # userinfo.email) are kept: in proxy mode FastMCP's RequireAuthMiddleware
+        # checks the provider's required upstream scopes against this token on
+        # every request, and dropping them refused every Google sign-in with
+        # insufficient_scope.
+        identity = {s for s in token.scopes if s not in ALL_SCOPES}
         return token.model_copy(
-            update={"scopes": sorted(granted), "claims": claims},
+            update={"scopes": sorted(set(granted) | identity), "claims": claims},
             deep=False,
         )
 
