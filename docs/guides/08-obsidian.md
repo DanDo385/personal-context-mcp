@@ -10,10 +10,20 @@ computer: the helper only ever calls out.
 
 ## Step 1: Choose where the vault lives
 
-- **To see notes on your iPhone or iPad too:** put the vault in iCloud Drive's Obsidian folder:
-  `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal Context`
-  (Obsidian must be installed on the Mac for that folder to exist.)
-- **Otherwise:** anywhere, for example `~/Obsidian/Personal Context`.
+**Want your notes on your iPhone or iPad too?** (Recommended.) The Obsidian phone app can only open
+vaults kept in iCloud Drive's Obsidian folder, which has an awkward address. Make a short shortcut to
+it once, so everything else can use `~/Obsidian`:
+
+```bash
+ln -s ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents ~/Obsidian
+```
+
+(Obsidian must be installed on the Mac for that iCloud folder to exist. If `~/Obsidian` already exists,
+skip the shortcut and, in the next step, use the full address instead:
+`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal Context`.) Your notes are stored in iCloud and show up
+in Obsidian on your phone; `~/Obsidian/Personal Context` is just an easier way to refer to them.
+
+**Mac only?** Skip the shortcut. `~/Obsidian/Personal Context` will then be an ordinary local folder.
 
 Open your `.env.local` and set:
 
