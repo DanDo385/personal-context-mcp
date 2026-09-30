@@ -2,8 +2,9 @@
 
 ## 1. Connect the MCP server
 
-At `grok.com/connectors`: **New Connector → Custom**, then paste
-`https://<your-host>/mcp`.
+Open **https://grok.com/connectors** (the Grok chat site, not your xAI account page at
+accounts.x.ai, which only lists sign-ins and apps authorized to your account). Click
+**New Connector → Custom**, then paste `https://<your-host>/mcp`.
 
 Grok opens a browser window for OAuth. Sign in with the Google account on your
 allowlist and approve the consent screen. Grok then discovers the tools the
@@ -41,12 +42,12 @@ Personal Context then becomes this app's only long-term memory, shared with the 
 | | |
 | --- | --- |
 | Transport | Streamable HTTP |
-| Auth | OAuth — **DCR required**, static client ids not supported |
+| Auth | OAuth, **DCR required**, static client ids not supported |
 | Tools | all 48 |
 | Tier | paid tiers only |
 
 **Three separate products.** xAI has more than one surface that connects to
-MCP servers — the Grok web app's Connectors, and the xAI API's remote MCP
+MCP servers: the Grok web app's Connectors, and the xAI API's remote MCP
 tools. Their setup does not carry over; adding the connector in the web app
 does not make it available to API calls, and vice versa. This document covers
 the web app, which is what shares context with the other three assistants.

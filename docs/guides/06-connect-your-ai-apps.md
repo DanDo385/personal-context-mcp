@@ -20,9 +20,9 @@ answering questions about your past work, and to save what gets decided.
 | App | Where to add it | Where the instruction goes | Needs | Full guide |
 | --- | --- | --- | --- | --- |
 | **Claude** | claude.ai → **Settings → Connectors → Add custom connector** | **Settings → Profile** → "What personal preferences should Claude consider" | any plan that offers custom connectors | [instructions/claude.md](../../instructions/claude.md) |
-| **ChatGPT** | chatgpt.com → **Settings → Apps & Connectors → Advanced → Developer mode**, then **Create** | **Settings → Personalization → Custom instructions** | a plan with developer mode | [instructions/chatgpt.md](../../instructions/chatgpt.md) |
-| **Gemini** | gemini.google.com **on a computer** → **Settings & help → Connected Apps → Custom apps → Add** | **Settings & help → Saved info** | a *personal* Google account with Keep Activity on | [instructions/gemini.md](../../instructions/gemini.md) |
-| **Grok** | grok.com/connectors → **New Connector → Custom** | **Settings → Customize** | a paid Grok plan | [instructions/grok.md](../../instructions/grok.md) |
+| **ChatGPT** | chatgpt.com → **Settings → Security and login → Developer mode** on, then **Settings → Plugins → +** | **Settings → Personalization → Custom instructions** | a plan with developer mode (Plus, Pro, Business, ...) | [instructions/chatgpt.md](../../instructions/chatgpt.md) |
+| **Gemini** | gemini.google.com **on a computer** → **Settings & help → Connected Apps → Custom apps for Spark → Add a custom app** | **Settings & help → Saved info** | **Google AI Pro or Ultra** (not Plus), a *personal* Google account, Keep Activity on | [instructions/gemini.md](../../instructions/gemini.md) |
+| **Grok** | **grok.com/connectors** (not your accounts.x.ai page) → **New Connector → Custom** | **Settings → Customize** | a paid Grok plan | [instructions/grok.md](../../instructions/grok.md) |
 
 The menus in these apps move around every few months. If a menu name doesn't match, look for
 "Connectors", "Apps" or "Integrations" in the settings, and check the full guide for the latest notes.
@@ -41,7 +41,7 @@ conversations into Personal Context.
 | --- | --- | --- | --- |
 | **Claude** | **Settings → Capabilities** (or **Settings → Memory**) | *Generate memory from chat history* and *Search and reference chats* | the Personal Context connector |
 | **ChatGPT** | **Settings → Personalization → Memory** | *Reference saved memories* and *Reference chat history* | Custom instructions |
-| **Gemini** | **Settings & help → Personal context** (sometimes **Past chats**) | *Your past chats with Gemini* | **Gemini Apps Activity / Keep Activity**: custom apps stop working without it. Also keep Saved info, where your instruction lives. |
+| **Gemini** | **Settings → Personal Intelligence** (older versions: **Personal context** or **Past chats**) | *Your past chats with Gemini* | **Gemini Apps Activity / Keep Activity**: custom apps stop working without it. Also keep Saved info, where your instruction lives. |
 | **Grok** | **Settings → Customize** or **Data controls** | *Memory* / *Personalize with memories* | Custom instructions |
 
 Optional: each app also has a switch that allows your chats to be used to train its models (Claude:
@@ -83,9 +83,10 @@ learned it, another one knew it.
 | --- | --- |
 | The sign-in window says `redirect_uri_mismatch` | Your Google client's redirect URI doesn't match your address + `/auth/callback` ([guide 3](03-google-sign-in.md)). |
 | Sign-in works, then *access denied* / *not allowed* | You chose a Google account that isn't in `PC_ALLOWED_SUBJECTS`. |
+| ChatGPT has no *Apps & Connectors*, only *Plugins* | That's the newer layout. Turn on **Settings → Security and login → Developer mode**, then add the server under **Settings → Plugins → +**. |
 | The connector was added but no tools appear | Remove it and add it again, or reload the page. ChatGPT especially sometimes needs this. |
 | Grok won't accept the address | Grok needs a paid plan; also make sure the address ends in `/mcp`. |
-| Gemini has no *Custom apps* option | It needs a personal (not work or school) Google account, Keep Activity switched on, and a computer browser. |
+| Gemini has no *Custom apps for Spark* section | Custom apps need **Google AI Pro or Ultra**; Plus and free don't include them. Also a personal (not work or school) Google account, Keep Activity on, a US English account, and a computer browser. |
 | The app never uses it on its own | Check the custom instruction is saved, or just ask explicitly: "check my personal context". |
 
 **Next:** [7. Keep your secrets in 1Password](07-keep-secrets-in-1password.md) (optional), or
