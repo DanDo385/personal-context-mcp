@@ -68,7 +68,6 @@ async def build_services(settings: Settings, db: Database) -> Services:
     audit = AuditService(db)
     projects = ProjectService(db)
     memories = MemoryService(db, embeddings, settings)
-    lists = ListService(db)
     notes = NoteService(db, embeddings)
     artifacts = ArtifactService(db, store, settings)
     classification = ClassificationService(db, classifier, settings)
@@ -76,6 +75,11 @@ async def build_services(settings: Settings, db: Database) -> Services:
     review = ReviewService(db)
     vault_paths = VaultPaths(settings.obsidian_vault_roots)
     sync_queue = SyncQueue(db, settings.obsidian_vault_roots)
+    lists = (
+        ListService(db, sync_queue=sync_queue, vault_paths=vault_paths)
+        if settings.obsidian_enabled
+        else ListService(db)
+    )
 
     sessions = SessionService(
         db,

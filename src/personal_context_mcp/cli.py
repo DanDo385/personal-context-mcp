@@ -25,6 +25,7 @@ from personal_context_mcp.extraction.deep import (
     DeepExtractor,
     estimate_cost,
     extraction_candidates,
+    vault_targets,
 )
 from personal_context_mcp.importers.adapters import IMPORTERS
 from personal_context_mcp.importers.reclassify import (
@@ -467,22 +468,34 @@ def reclassify_conversations_cmd(
 @main.command()
 @click.option("--limit", type=int, default=25, show_default=True)
 @click.option(
+    "--legacy-triage",
+    is_flag=True,
+    help="Select by the deep_extraction threshold instead of Jev's vault plan.",
+)
+@click.option(
     "--min-importance",
     type=float,
-    default=0.5,
+    default=0.0,
     show_default=True,
-    help="Pass-1 importance (0-1) below which a conversation is skipped.",
+    help="With --legacy-triage: pass-1 importance (0-1) below which a conversation is skipped.",
 )
 @click.option("--redo", is_flag=True, help="Also redo conversations already extracted.")
 @click.option("--concurrency", type=int, default=None, help="Default: PC_EXTRACTION_CONCURRENCY.")
 @click.option("--dry-run", is_flag=True, help="Show what would run and its estimated cost.")
 def extract(
-    limit: int, min_importance: float, redo: bool, concurrency: int | None, dry_run: bool
+    limit: int,
+    legacy_triage: bool,
+    min_importance: float,
+    redo: bool,
+    concurrency: int | None,
+    dry_run: bool,
 ) -> None:
-    """Pass 2: a frontier model reads conversations Jev marked for deep extraction.
+    """Claude reads the conversations Jev put in the vault plan and writes their notes.
 
-    Results are written through session_checkpoint, so they are idempotent and
-    routed like any live session. Conversations whose sensitivity is in
+    For each: a summary, decisions, facts, open questions and topics (written
+    through session_checkpoint), plus the Obsidian note itself in the folder
+    Jev chose, its project, tags, and any unfinished actions on the shared
+    "From past chats" list. Conversations whose sensitivity is in
     PC_NO_EXTERNAL_SENSITIVITY are never sent. Start with --dry-run.
     """
     settings = get_settings()
@@ -491,13 +504,18 @@ def extract(
     async def run() -> None:
         services = await _with_services(settings)
         try:
-            candidates = await extraction_candidates(
-                services, limit=limit, min_importance=min_importance, redo=redo
-            )
+            if legacy_triage:
+                candidates = await extraction_candidates(
+                    services, limit=limit, min_importance=min_importance, redo=redo
+                )
+            else:
+                candidates = await vault_targets(services, limit=limit, redo=redo)
             click.echo(json.dumps(estimate_cost(candidates, settings), indent=2))
             if dry_run or not candidates:
                 for c in candidates[:20]:
-                    click.echo(f"  {c.importance or 0:.2f}  {c.chars:>8} chars  {c.title}")
+                    click.echo(
+                        f"  {c.importance or 0:.2f}  {c.destination:<9} {c.chars:>8} chars  {c.title}"
+                    )
                 return
             if settings.extraction_provider != "anthropic":
                 raise click.ClickException(
@@ -506,7 +524,9 @@ def extract(
             extractor = DeepExtractor(services)
             try:
                 report = await extractor.run(
-                    [c.conversation_id for c in candidates], concurrency=concurrency
+                    [c.conversation_id for c in candidates],
+                    concurrency=concurrency,
+                    destinations={c.conversation_id: c.destination for c in candidates},
                 )
             finally:
                 await extractor.aclose()

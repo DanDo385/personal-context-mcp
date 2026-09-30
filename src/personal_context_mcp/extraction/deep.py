@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import UUID
@@ -34,6 +35,7 @@ import anthropic
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from personal_context_mcp.auth.principal import Principal
+from personal_context_mcp.classifier.questions import DESTINATION_CRITERIA
 from personal_context_mcp.config import Settings
 from personal_context_mcp.embeddings.base import redact
 from personal_context_mcp.importers.reclassify import load_conversation
@@ -90,6 +92,9 @@ class ExtractionPayload(_Strict):
     unfinished_actions: list[str]
     open_questions: list[str]
     topics: list[str]
+    note_title: str
+    note_markdown: str
+    tags: list[str]
 
 
 SYSTEM_PROMPT = """\
@@ -115,8 +120,39 @@ does not show as done.
 - topics: 1-5 short concept names this conversation is substantially about, \
 suitable as wiki page titles (e.g. "MCP OAuth", "pgvector").
 
-Use empty lists where nothing qualifies. An empty result is better than a \
-padded one. Do not invent anything the transcript does not support."""
+Then write the Obsidian note this conversation becomes, for the vault section \
+named in the request:
+- note_title: a clear, specific title of 3-8 words describing the subject (not \
+a vague chat title like "New conversation"). Conversations on the same subject \
+should get the same title, so they merge into one note.
+- note_markdown: the note itself, written as a reference someone will reread \
+without the conversation. Open with a 2-4 sentence overview, then use ## \
+sections that fit the content (for example Key points, How it works, Steps, \
+Decisions, Options compared, Open questions). Be generous: keep every detail, \
+command, number, name and link worth having later. Markdown only: no front \
+matter and no top-level # title.
+- tags: 3-8 lowercase Obsidian tags, words joined with hyphens, nested with / \
+where useful (for example mcp, obsidian, defi/pendle, agents/hermes). No #.
+
+Use empty lists where nothing qualifies. Do not invent anything the transcript \
+does not support."""
+
+
+#: Vault folders a note can be written to (keys of DESTINATION_CRITERIA that
+#: are real notes; archive_only never reaches here).
+_NOTE_CLASSES = {"project", "research", "wiki", "concept", "resource", "daily", "inbox"}
+
+FOLLOWUP_LIST = "From past chats"
+
+
+def _clean_tags(tags: list[str]) -> list[str]:
+    """Obsidian tags: lowercase, no spaces or leading #, nested with /."""
+    out: list[str] = []
+    for tag in tags:
+        clean = re.sub(r"[^a-z0-9/_-]+", "-", tag.strip().lstrip("#").lower()).strip("-/")
+        if clean and not clean.isdigit() and clean not in out:
+            out.append(clean)
+    return out[:8]
 
 
 # --------------------------------------------------------------------------
@@ -130,6 +166,7 @@ class Candidate:
     title: str | None
     chars: int
     importance: float | None
+    destination: str = "inbox"
 
 
 async def extraction_candidates(
@@ -182,6 +219,42 @@ async def extraction_candidates(
     ]
 
 
+async def vault_targets(services: Services, *, limit: int, redo: bool = False) -> list[Candidate]:
+    """The conversations Jev's answers put in the vault (vault_plan), best
+    first, not yet extracted unless ``redo``. Each carries the folder Jev chose."""
+    from personal_context_mcp.vault_plan import vault_candidates
+
+    chosen = await vault_candidates(services.db, services.settings)
+    ids = [c.conversation_id for c in chosen]
+    rows = await services.db.fetch(
+        """
+        SELECT c.id, c.metadata ? 'extraction' AS done,
+               (SELECT coalesce(sum(length(m.content)), 0)
+                  FROM messages m WHERE m.conversation_id = c.id) AS chars
+        FROM conversations c WHERE c.id = ANY($1::uuid[])
+        """,
+        ids,
+    )
+    info = {row["id"]: row for row in rows}
+    out: list[Candidate] = []
+    for c in chosen:
+        row = info.get(c.conversation_id)
+        if row is None or (row["done"] and not redo):
+            continue
+        out.append(
+            Candidate(
+                conversation_id=c.conversation_id,
+                title=c.title,
+                chars=int(row["chars"]),
+                importance=c.score,
+                destination=c.destination,
+            )
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def estimate_cost(candidates: list[Candidate], settings: Settings) -> dict[str, Any]:
     """Rough upper bound, for deciding whether to run. ~3.5 chars per token;
     ~2k output tokens including thinking per conversation."""
@@ -225,6 +298,8 @@ class ExtractionReport:
     failed: int = 0
     decisions: int = 0
     memories: int = 0
+    notes: int = 0
+    followups: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     errors: list[str] = field(default_factory=list)
@@ -237,6 +312,8 @@ class ExtractionReport:
             "failed": self.failed,
             "decisions_created": self.decisions,
             "memories_created": self.memories,
+            "notes_written": self.notes,
+            "followups_added": self.followups,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "errors": self.errors[:50],
@@ -257,7 +334,7 @@ class DeepExtractor:
         await self._client.close()
 
     async def _ask(
-        self, title: str | None, transcript: str
+        self, title: str | None, transcript: str, destination: str = "inbox"
     ) -> tuple[Any, ExtractionPayload | None]:
         response = await self._client.beta.messages.create(
             model=self._settings.extraction_model,
@@ -277,7 +354,9 @@ class DeepExtractor:
                 {
                     "role": "user",
                     "content": (
-                        f"Conversation title: {title or '(untitled)'}\n\n"
+                        f"Conversation title: {title or '(untitled)'}\n"
+                        f"Vault section for the note: {destination}: "
+                        f"{DESTINATION_CRITERIA.get(destination, '')}\n\n"
                         f"<transcript>\n{transcript}\n</transcript>"
                     ),
                 }
@@ -290,7 +369,9 @@ class DeepExtractor:
         text = next((b.text for b in response.content if b.type == "text"), "")
         return response, ExtractionPayload.model_validate(json.loads(text))
 
-    async def extract_one(self, conversation_id: UUID, report: ExtractionReport) -> None:
+    async def extract_one(
+        self, conversation_id: UUID, report: ExtractionReport, destination: str = "inbox"
+    ) -> None:
         services = self._services
         report.attempted += 1
         conversation = await load_conversation(services, conversation_id)
@@ -306,7 +387,7 @@ class DeepExtractor:
             [(m.role, redact(m.content)) for m in conversation.messages],
             self._settings.extraction_max_transcript_chars,
         )
-        response, payload = await self._ask(conversation.title, transcript)
+        response, payload = await self._ask(conversation.title, transcript, destination)
         usage = getattr(response, "usage", None)
         report.input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         report.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
@@ -377,10 +458,17 @@ class DeepExtractor:
         report.memories += int(created.get("memories", 0))
         report.extracted += 1
 
+        note_id = await self._write_note(
+            conversation_id, conversation, payload, destination, sensitivity
+        )
+        report.notes += 1
+        report.followups += await self._add_followups(conversation_id, conversation, payload)
+
         record.update(
             status="extracted",
             project=payload.project,
             topics=payload.topics,
+            note_id=str(note_id),
             counts={
                 "decisions": len(payload.decisions),
                 "facts": len(payload.facts),
@@ -389,6 +477,105 @@ class DeepExtractor:
             },
         )
         await self._mark(conversation_id, record)
+
+    async def _write_note(
+        self,
+        conversation_id: UUID,
+        conversation: Any,
+        payload: ExtractionPayload,
+        destination: str,
+        sensitivity: str | None,
+    ) -> UUID:
+        """Save the note Claude wrote and queue it for the vault.
+
+        Jev chose the folder; Claude named the project and wrote the text.
+        Notes with the same title merge (append), so repeated subjects
+        consolidate into one note rather than many near-duplicates.
+        """
+        services = self._services
+        project_id: UUID | None = None
+        project_slug: str | None = None
+        if payload.project and payload.project.strip():
+            project_id, _ = await services.projects.create(
+                name=payload.project.strip(), source_provider=conversation.provider
+            )
+            project_slug = await services.db.fetchval(
+                "SELECT slug FROM projects WHERE id = $1", project_id
+            )
+        note_class = destination if destination in _NOTE_CLASSES else "inbox"
+        title = payload.note_title.strip() or (conversation.title or "Untitled conversation")
+        note_id, _, _ = await services.notes.upsert(
+            title=title,
+            content=payload.note_markdown,
+            note_class=note_class,
+            project_id=project_id,
+            sensitivity=sensitivity or "normal",
+            source_provider=conversation.provider,
+            source_conversation_id=conversation_id,
+            provenance="assistant_generated",
+            author="deep-extraction",
+            append=True,
+        )
+        happened = max((m.created_at for m in conversation.messages if m.created_at), default=None)
+        await services.db.execute(
+            """
+            UPDATE notes SET metadata = metadata || $2::jsonb,
+                   vault_path = coalesce(vault_path, $3)
+            WHERE id = $1
+            """,
+            note_id,
+            {
+                "tags": _clean_tags(payload.tags),
+                "topics": payload.topics,
+                "source_date": happened.date().isoformat() if happened else None,
+            },
+            services.vault_paths.note(
+                note_class=note_class, title=title, project_slug=project_slug
+            ),
+        )
+        vault_path = await services.db.fetchval(
+            "SELECT vault_path FROM notes WHERE id = $1", note_id
+        )
+        if services.settings.obsidian_enabled:
+            await services.sync_queue.enqueue(
+                job_type="write_note",
+                object_type="note",
+                object_id=note_id,
+                vault_path=vault_path,
+                payload={"note_id": str(note_id)},
+                source_provider=conversation.provider,
+            )
+        return note_id
+
+    async def _add_followups(
+        self, conversation_id: UUID, conversation: Any, payload: ExtractionPayload
+    ) -> int:
+        """Unfinished actions from old chats go to one shared list, where any
+        app (and the vault) can see, tick off or drop them."""
+        if not payload.unfinished_actions:
+            return 0
+        services = self._services
+        list_id, _ = await services.lists.create(
+            name=FOLLOWUP_LIST,
+            description="Things you meant to do, found in past conversations across your AI apps.",
+            list_type="task",
+        )
+        happened = max((m.created_at for m in conversation.messages if m.created_at), default=None)
+        where = (
+            f"{conversation.provider}, {happened:%Y-%m-%d}" if happened else conversation.provider
+        )
+        added = 0
+        for action in payload.unfinished_actions:
+            _, created = await services.lists.add_item(
+                list_id=list_id,
+                text=action.strip(),
+                notes=f'From "{conversation.title or "a conversation"}" ({where})',
+                source_provider=conversation.provider,
+                source_conversation_id=conversation_id,
+                provenance="assistant_generated",
+            )
+            added += int(created)
+        return added
 
     async def _mark(self, conversation_id: UUID, record: dict[str, Any]) -> None:
         await self._services.db.execute(
@@ -403,7 +590,11 @@ class DeepExtractor:
         )
 
     async def run(
-        self, conversation_ids: list[UUID], *, concurrency: int | None = None
+        self,
+        conversation_ids: list[UUID],
+        *,
+        concurrency: int | None = None,
+        destinations: dict[UUID, str] | None = None,
     ) -> ExtractionReport:
         report = ExtractionReport()
         semaphore = asyncio.Semaphore(max(1, concurrency or self._settings.extraction_concurrency))
@@ -411,7 +602,11 @@ class DeepExtractor:
         async def one(conversation_id: UUID) -> None:
             async with semaphore:
                 try:
-                    await self.extract_one(conversation_id, report)
+                    await self.extract_one(
+                        conversation_id,
+                        report,
+                        (destinations or {}).get(conversation_id, "inbox"),
+                    )
                 except (anthropic.APIError, ValidationError, ValueError, RuntimeError) as exc:
                     report.failed += 1
                     report.errors.append(f"{conversation_id}: {type(exc).__name__}: {exc}")
