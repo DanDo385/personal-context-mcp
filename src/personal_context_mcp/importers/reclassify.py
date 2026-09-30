@@ -20,9 +20,11 @@ from personal_context_mcp.importers.base import (
     NormalizedMessage,
 )
 from personal_context_mcp.importers.runner import (
+    classification_transcript,
     derive_summary,
     route_conversation,
     screen_conversation,
+    transcript_budget,
 )
 from personal_context_mcp.logging_setup import get_logger
 from personal_context_mcp.services import Services
@@ -132,6 +134,7 @@ async def reclassify_conversation(
         sensitivity=sensitivity,
         report=report,
         use_cache=use_cache,
+        transcript=classification_transcript(conversation, transcript_budget(services)),
     )
 
 

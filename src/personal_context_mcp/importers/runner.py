@@ -82,6 +82,29 @@ def derive_summary(conversation: NormalizedConversation) -> str:
     )
 
 
+def classification_transcript(conversation: NormalizedConversation, max_chars: int) -> str:
+    """The whole conversation for Jev, as ``ROLE: text`` lines.
+
+    Jev judges far better from the transcript than from a four-message
+    excerpt. Over budget, keep the opening (where the problem is stated) and
+    the end (where it is settled) and say what was cut.
+    """
+    lines = [
+        f"{m.role.upper()}: {m.content.strip()}" for m in conversation.messages if m.content.strip()
+    ]
+    full = "\n\n".join(lines)
+    if len(full) <= max_chars:
+        return full
+    head, tail = full[: int(max_chars * 0.4)], full[-int(max_chars * 0.6) :]
+    omitted = len(full) - len(head) - len(tail)
+    return f"{head}\n\n[... {omitted} characters from the middle omitted ...]\n\n{tail}"
+
+
+def transcript_budget(services: Services) -> int:
+    """Leave room in Jev's state for the title, excerpt and other fields."""
+    return max(4_000, services.settings.jev_max_state_chars - 4_000)
+
+
 async def screen_conversation(services: Services, conversation_id: Any, texts: list[str]) -> str:
     """Run the deterministic sensitivity screen and record it on the row.
 
@@ -121,6 +144,7 @@ async def route_conversation(
     sensitivity: str,
     report: ImportReport,
     use_cache: bool = True,
+    transcript: str = "",
 ) -> Routing | None:
     """Classify one stored conversation and act on the routing.
 
@@ -143,6 +167,8 @@ async def route_conversation(
         "sensitivity": sensitivity,
         "stated_project": None,
     }
+    if transcript:
+        state["transcript"] = transcript
     result, routing, event_id = await services.classification.classify_checkpoint(
         state, object_id=conversation_id, historical_import=True, use_cache=use_cache
     )
@@ -444,6 +470,7 @@ class ImportRunner:
             message_count=len(conversation.messages),
             sensitivity=sensitivity,
             report=report,
+            transcript=classification_transcript(conversation, transcript_budget(services)),
         )
 
     async def _import_attachment(

@@ -36,6 +36,7 @@ from personal_context_mcp.importers.runner import ImportRunner
 from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.services import build_services, set_services
 from personal_context_mcp.setup_wizard import Answers, build_env, next_steps
+from personal_context_mcp.vault_plan import VaultCandidate, vault_candidates
 from personal_context_mcp.wiki.service import WikiService
 
 
@@ -728,6 +729,52 @@ def gemini_sync_push(dry_run: bool) -> None:
         )
 
     asyncio.run(run())
+
+
+@main.command(name="vault-plan")
+@click.option("--top", type=int, default=25, show_default=True, help="How many to list.")
+def vault_plan_cmd(top: int) -> None:
+    """Show which imported conversations Jev's answers put in the vault, and where."""
+    import collections
+
+    settings = get_settings()
+    _configure_cli_logging(settings)
+
+    async def run() -> list[VaultCandidate]:
+        services = await _with_services(settings)
+        try:
+            return await vault_candidates(services.db, settings)
+        finally:
+            await services.aclose()
+            set_services(None)
+
+    chosen = asyncio.run(run())
+    if not chosen:
+        click.echo("No conversations qualify yet. Import and classify some first.")
+        return
+
+    def ages(c: VaultCandidate) -> str:
+        return (
+            "last 30 days" if c.age_days <= 30 else "1-6 months" if c.age_days <= 182 else "older"
+        )
+
+    click.echo(
+        f"{len(chosen)} conversations would become notes "
+        f"(min score {settings.vault_min_score}, recency bonus {settings.vault_recency_bonus} "
+        f"halving every {settings.vault_recency_halflife_days:g} days)."
+    )
+    for label, counter in (
+        ("folder", collections.Counter(c.destination for c in chosen)),
+        ("app", collections.Counter(c.provider for c in chosen)),
+        ("age", collections.Counter(ages(c) for c in chosen)),
+        ("project", collections.Counter(c.project or "(none)" for c in chosen)),
+    ):
+        click.echo(f"  by {label}: " + ", ".join(f"{k} {v}" for k, v in counter.most_common()))
+    click.echo("")
+    for c in chosen[:top]:
+        click.echo(
+            f"  {c.score:.2f}  {c.destination:<9} {c.provider:<7} {c.age_days:>5.0f}d  {c.title}"
+        )
 
 
 @main.command()
