@@ -145,6 +145,9 @@ class Settings(BaseSettings):
     extraction_model: str = "claude-opus-5-5"
     extraction_max_transcript_chars: int = 120_000
     extraction_concurrency: int = 3
+    #: Minimum pass-1 deep_extraction probability for a conversation to be a
+    #: pass-2 candidate. Candidates are then ranked by importance.
+    extraction_min_probability: float = 0.6
 
     # ------------------------------------------------------------ embeddings
     embedding_provider: EmbeddingProvider = "none"

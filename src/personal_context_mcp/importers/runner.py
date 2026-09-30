@@ -214,7 +214,10 @@ async def route_conversation(
         if saved.outcome == "created":
             report.memories_created += 1
 
-    if routing.deep_extract is Verdict.YES and not result.degraded:
+    if (
+        not result.degraded
+        and routing.deep_extract_p >= services.settings.extraction_min_probability
+    ):
         report.deep_extraction_candidates += 1
 
     if routing.needs_review:
