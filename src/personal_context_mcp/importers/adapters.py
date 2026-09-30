@@ -12,6 +12,7 @@ attachment it names becomes a ``pending_import`` artifact.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -435,6 +436,9 @@ class GrokImporter:
 
     def __init__(self, limits: ArchiveLimits | None = None) -> None:
         self._limits = limits or ArchiveLimits()
+        #: Conversations present in the export that yielded nothing readable.
+        #: The runner reports them, so nothing is dropped without being named.
+        self.problems: list[str] = []
 
     def detect(self, path: Path) -> bool:
         try:
@@ -498,21 +502,64 @@ class GrokImporter:
                 return value
         return None
 
+    @staticmethod
+    def _role(sender: Any) -> str:
+        """Grok senders vary: "human", "user", "ASSISTANT", "assistant", or a
+        model name such as "grok-4". Only the person is ever the user."""
+        value = str(sender or "").strip().lower()
+        if value in ("human", "user"):
+            return "user"
+        if value == "system":
+            return "system"
+        return "assistant"
+
+    @staticmethod
+    def _ordered(messages: list[dict[str, Any]], leaf_id: Any) -> list[dict[str, Any]]:
+        """The kept branch: walk parent links back from the leaf when the export
+        names one (an edited or regenerated reply leaves siblings behind),
+        otherwise order by time."""
+        by_id = {
+            str(m.get("_id") or m.get("id")): m for m in messages if m.get("_id") or m.get("id")
+        }
+        if leaf_id and str(leaf_id) in by_id:
+            path: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            current: Any = str(leaf_id)
+            while current and current in by_id and current not in seen:
+                seen.add(current)
+                message = by_id[current]
+                path.append(message)
+                current = str(message.get("parent_response_id") or "") or None
+            return list(reversed(path))
+        return sorted(
+            messages,
+            key=lambda m: (
+                parse_timestamp(m.get("create_time") or m.get("timestamp"))
+                or datetime.min.replace(tzinfo=UTC)
+            ),
+        )
+
     def _normalize(
         self, raw: dict[str, Any], archive_index: dict[str, NormalizedAttachment]
     ) -> NormalizedConversation | None:
-        entries = self._message_list(raw) or []
+        # The 2026 backend export wraps metadata in "conversation" and each
+        # message in {"response": {...}}; older shapes are flat.
+        meta = raw["conversation"] if isinstance(raw.get("conversation"), dict) else raw
+        entries = [
+            item["response"]
+            if isinstance(item, dict) and isinstance(item.get("response"), dict)
+            else item
+            for item in (self._message_list(raw) or [])
+            if isinstance(item, dict)
+        ]
+        conversation_id = str(
+            meta.get("conversation_id") or meta.get("id") or meta.get("uuid") or ""
+        )
         messages: list[NormalizedMessage] = []
         attachments: list[NormalizedAttachment] = []
 
-        for index, message in enumerate(entries):
-            if not isinstance(message, dict):
-                continue
-            role = str(
-                message.get("role") or message.get("sender") or message.get("author") or "user"
-            ).lower()
-            if role in ("grok", "model", "bot"):
-                role = "assistant"
+        for index, message in enumerate(self._ordered(entries, meta.get("leaf_response_id"))):
+            role = self._role(message.get("role") or message.get("sender") or message.get("author"))
             text = (
                 message.get("message")
                 or message.get("text")
@@ -523,13 +570,15 @@ class GrokImporter:
             if text.strip():
                 messages.append(
                     NormalizedMessage(
-                        role=role if role in ("user", "assistant", "system") else "user",
+                        role=role,
                         content=text,
                         provenance=provenance_for(role),
                         created_at=parse_timestamp(
                             message.get("create_time") or message.get("timestamp")
                         ),
-                        provider_message_id=str(message.get("id") or "") or None,
+                        provider_message_id=str(message.get("_id") or message.get("id") or "")
+                        or None,
+                        model=message.get("model") if role == "assistant" else None,
                     )
                 )
             for attachment in message.get("attachments") or message.get("files") or []:
@@ -552,16 +601,20 @@ class GrokImporter:
                     )
 
         if not messages:
+            self.problems.append(
+                f"grok conversation {conversation_id or '?'} "
+                f"({meta.get('title') or 'untitled'!r}) had no readable messages"
+            )
             return None
         return NormalizedConversation(
             provider=self.provider,
-            provider_conversation_id=str(
-                raw.get("conversation_id") or raw.get("id") or raw.get("uuid") or ""
+            provider_conversation_id=conversation_id,
+            title=meta.get("title") or meta.get("name"),
+            created_at=parse_timestamp(meta.get("create_time") or meta.get("created_at")),
+            updated_at=parse_timestamp(
+                meta.get("modify_time") or meta.get("update_time") or meta.get("updated_at")
             ),
-            title=raw.get("title") or raw.get("name"),
-            created_at=parse_timestamp(raw.get("create_time") or raw.get("created_at")),
-            updated_at=parse_timestamp(raw.get("update_time") or raw.get("updated_at")),
-            model=raw.get("model"),
+            model=meta.get("model"),
             messages=messages,
             attachments=attachments,
         )

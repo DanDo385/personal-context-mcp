@@ -284,6 +284,102 @@ def test_grok_detects_and_parses(tmp_path: Path) -> None:
     assert [m.role for m in conversation.messages] == ["user", "assistant"]
 
 
+def _ms(value: str) -> dict:
+    """Grok's Mongo-style timestamp: {"$date": {"$numberLong": "<ms>"}}."""
+    from datetime import datetime
+
+    ms = int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() * 1000)
+    return {"$date": {"$numberLong": str(ms)}}
+
+
+def _resp(rid: str, sender: str, text: str, at: str, parent: str | None) -> dict:
+    return {
+        "response": {
+            "_id": rid,
+            "conversation_id": "grok-real",
+            "message": text,
+            "sender": sender,
+            "create_time": _ms(at),
+            "parent_response_id": parent,
+            "metadata": {},
+            "model": "grok-4",
+            "children": [],
+            "path": [],
+        },
+        "share_link": None,
+    }
+
+
+# The shape of a real 2026 Grok export (prod-grok-backend.json): each item is
+# {"conversation": {...}, "responses": [{"response": {...}}]}, senders vary in
+# case and include model names, and an edited reply leaves a branch whose kept
+# version is named by leaf_response_id.
+GROK_BACKEND_EXPORT = {
+    "conversations": [
+        {
+            "conversation": {
+                "id": "grok-real",
+                "title": "Branching chat",
+                "create_time": "2026-09-01T10:00:00.000000Z",
+                "modify_time": "2026-09-01T10:05:00.000Z",
+                "leaf_response_id": "r4",
+                "temporary": False,
+            },
+            "responses": [
+                _resp("r1", "human", "First question", "2026-09-01T10:00:00Z", None),
+                _resp("r2", "ASSISTANT", "Discarded answer", "2026-09-01T10:01:00Z", "r1"),
+                _resp("r3", "assistant", "Kept answer", "2026-09-01T10:02:00Z", "r1"),
+                _resp("r4", "human", "Follow-up", "2026-09-01T10:03:00Z", "r3"),
+            ],
+        },
+        {
+            "conversation": {"id": "grok-flat", "title": "No leaf", "leaf_response_id": None},
+            "responses": [
+                _resp("f2", "grok-4", "Answer", "2026-09-02T10:01:00Z", "f1"),
+                _resp("f1", "human", "Question", "2026-09-02T10:00:00Z", None),
+            ],
+        },
+        {"conversation": {"id": "grok-empty", "title": "Nothing"}, "responses": []},
+    ],
+    "projects": [],
+    "tasks": [],
+    "media_posts": [],
+}
+
+
+def test_grok_reads_the_real_backend_export(tmp_path: Path) -> None:
+    archive = _zip(
+        tmp_path / "gr.zip",
+        {"ttl/30d/export_data/abc/prod-grok-backend.json": GROK_BACKEND_EXPORT},
+    )
+    importer = GrokImporter()
+    assert importer.detect(archive)
+
+    conversations = {c.provider_conversation_id: c for c in importer.parse(archive)}
+    assert set(conversations) == {"grok-real", "grok-flat"}
+
+    real = conversations["grok-real"]
+    assert real.title == "Branching chat"
+    # Follows the kept branch from leaf_response_id; the edited-away reply is dropped.
+    assert [(m.role, m.content) for m in real.messages] == [
+        ("user", "First question"),
+        ("assistant", "Kept answer"),
+        ("user", "Follow-up"),
+    ]
+    assert real.messages[0].created_at is not None
+    assert real.messages[0].created_at.year == 2026
+
+    # Without a leaf, messages are ordered by time; model-name senders are the assistant.
+    flat = conversations["grok-flat"]
+    assert [(m.role, m.content) for m in flat.messages] == [
+        ("user", "Question"),
+        ("assistant", "Answer"),
+    ]
+
+    # A conversation that yields nothing readable is reported, not silently skipped.
+    assert any("grok-empty" in problem for problem in importer.problems)
+
+
 def test_grok_handles_an_alternative_shape(tmp_path: Path) -> None:
     """The format is less settled, so the adapter probes rather than assumes."""
     alternative = [
