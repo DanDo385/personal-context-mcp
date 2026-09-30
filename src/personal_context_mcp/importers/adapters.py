@@ -212,6 +212,8 @@ class ClaudeImporter:
 
     def __init__(self, limits: ArchiveLimits | None = None) -> None:
         self._limits = limits or ArchiveLimits()
+        #: Reported by the runner so skipped conversations are never silent.
+        self.problems: list[str] = []
 
     def detect(self, path: Path) -> bool:
         try:
@@ -233,6 +235,9 @@ class ClaudeImporter:
         members = load_json_members(path, names=("conversations.json",), limits=self._limits)
         conversations = members.get("conversations.json") or []
         archive_index = collect_attachments(path, limits=self._limits)
+        # Claude's export can list older conversations as message skeletons
+        # with no text at all. They cannot be imported, but the gap is named.
+        blank_dates: list[str] = []
 
         for raw in conversations:
             if not isinstance(raw, dict):
@@ -255,6 +260,9 @@ class ClaudeImporter:
                     )
                 attachments += self._message_attachments(message, index, archive_index)
 
+            if not messages:
+                blank_dates.append(str(raw.get("created_at") or "")[:10])
+                continue
             if messages:
                 yield NormalizedConversation(
                     provider=self.provider,
@@ -267,6 +275,14 @@ class ClaudeImporter:
                     attachments=attachments,
                     metadata={"account": (raw.get("account") or {}).get("uuid")},
                 )
+
+        if blank_dates:
+            dated = sorted(d for d in blank_dates if d)
+            span = f" (created {dated[0]} to {dated[-1]})" if dated else ""
+            self.problems.append(
+                f"{len(blank_dates)} Claude conversations{span} have no text in the export "
+                "(Claude included only empty placeholders), so they could not be imported"
+            )
 
     def _message_attachments(
         self, message: dict[str, Any], index: int, archive_index: dict[str, NormalizedAttachment]
