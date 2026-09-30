@@ -160,6 +160,19 @@ class Settings(BaseSettings):
         default_factory=lambda: ["highly_sensitive"]
     )
 
+    # ------------------------------------------------ gemini drive digest
+    #: For assistants that cannot connect (Gemini without custom apps): a
+    #: weekly digest pushed to one Google Doc that a Gemini Gem reads.
+    #: A "Desktop app" OAuth client with only the drive.file scope.
+    google_drive_client_id: str = ""
+    google_drive_client_secret: SecretStr = SecretStr("")
+    #: Written by `personal-context-mcp gemini-sync authorize`.
+    google_drive_refresh_token: SecretStr = SecretStr("")
+    gemini_digest_doc_name: str = "Personal Context (for Gemini)"
+    #: Optional: the Doc to update. Otherwise remembered in .data/gemini-sync.json.
+    gemini_digest_doc_id: str = ""
+    gemini_digest_days: int = 14
+
     # -------------------------------------------------------------- obsidian
     obsidian_enabled: bool = True
     obsidian_mirror_max_mb: float = 5.0

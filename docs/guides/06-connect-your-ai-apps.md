@@ -86,7 +86,7 @@ learned it, another one knew it.
 | ChatGPT has no *Apps & Connectors*, only *Plugins* | That's the newer layout. Turn on **Settings → Security and login → Developer mode**, then add the server under **Settings → Plugins → +**. |
 | The connector was added but no tools appear | Remove it and add it again, or reload the page. ChatGPT especially sometimes needs this. |
 | Grok won't accept the address | Grok needs a paid plan; also make sure the address ends in `/mcp`. |
-| Gemini has no *Custom apps for Spark* section | Custom apps need **Google AI Pro or Ultra**; Plus and free don't include them. Also a personal (not work or school) Google account, Keep Activity on, a US English account, and a computer browser. |
+| Gemini has no *Custom apps for Spark* section | Custom apps need **Google AI Pro or Ultra**; Plus and free don't include them. Use [guide 11](11-gemini-without-custom-apps.md) instead. Also a personal (not work or school) Google account, Keep Activity on, a US English account, and a computer browser. |
 | The app never uses it on its own | Check the custom instruction is saved, or just ask explicitly: "check my personal context". |
 
 **Next:** [7. Keep your secrets in 1Password](07-keep-secrets-in-1password.md) (optional), or

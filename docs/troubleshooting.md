@@ -61,6 +61,10 @@ Find what you're seeing below. Each guide also ends with a table for its own ste
 | `worker rejected: check OBSIDIAN_SYNC_API_KEY` | Helper and server disagree on the shared key. | Make `OBSIDIAN_SYNC_API_KEY` equal `PC_WORKER_API_KEY`; push settings and redeploy if you changed the server's. |
 | An edit of mine didn't show up in the apps | The helper wasn't running when you edited. | Start it; changed notes are pushed on its next pass. If the server also changed that note, the server's update is held back as a *conflict* and your edit stays in the vault. |
 
+## Gemini digest
+
+See the table at the end of [guide 11](guides/11-gemini-without-custom-apps.md#common-problems).
+
 ## Importing
 
 | You see | What it means | Fix |

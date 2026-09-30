@@ -10,6 +10,7 @@ Helpers for putting the server online and keeping the Obsidian helper running. N
 | `preflight.sh` | 1Password users: fails if any field of your deployment's item is empty or `REPLACE_ME`. Needs `PC_OP_ITEM` (and `PC_OP_VAULT`) in `deploy/local.env`; otherwise it's skipped. |
 | `install-worker.sh` | macOS: installs the Obsidian helper as a LaunchAgent (starts at login, restarts on failure). Reads `deploy/worker.env.op` through `op run` if present, else `.env.local`. |
 | `obsidian-sync.plist` | The LaunchAgent template `install-worker.sh` fills in. |
+| `install-gemini-sync.sh`, `gemini-sync.plist` | macOS: pushes the Personal Context digest to its Google Doc weekly for a Gemini Gem ([guide 11](../docs/guides/11-gemini-without-custom-apps.md)). |
 | `*.env.op.example` | Templates of `op://` reference files: `production` (what Vercel gets), `admin` (commands you run against production), `worker` (the Obsidian helper). Copy to the name without `.example`; the copies are Git-ignored. |
 | `local.env` *(yours, Git-ignored)* | Personal defaults for the scripts. See below. |
 
