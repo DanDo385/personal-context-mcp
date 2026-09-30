@@ -324,6 +324,8 @@ class ImportRunner:
             pending.add(asyncio.create_task(import_guarded(conversation)))
         if pending:
             await asyncio.wait(pending)
+        # Conversations the parser could not read are named, never dropped silently.
+        report.errors.extend(getattr(importer, "problems", []))
 
         await self._services.db.execute(
             """

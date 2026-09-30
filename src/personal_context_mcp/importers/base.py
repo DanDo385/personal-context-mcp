@@ -134,6 +134,15 @@ def parse_timestamp(value: Any) -> datetime | None:
     """Accept the several shapes providers use for a timestamp."""
     if value is None:
         return None
+    if isinstance(value, dict):
+        # MongoDB extended JSON, used by Grok: {"$date": {"$numberLong": "<ms>"}}
+        # or {"$date": "<iso>"} or {"$date": <ms>}.
+        inner = value.get("$date", value.get("$numberLong"))
+        if isinstance(inner, dict):
+            inner = inner.get("$numberLong")
+        if isinstance(inner, str) and inner.lstrip("-").isdigit():
+            inner = int(inner)
+        return parse_timestamp(inner) if inner is not None else None
     if isinstance(value, (int, float)):
         # Heuristic: values past ~2001 in seconds; anything far larger is ms.
         seconds = value / 1000 if value > 1e11 else value
