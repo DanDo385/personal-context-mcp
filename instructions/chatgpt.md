@@ -2,22 +2,28 @@
 
 ## 1. Enable developer mode
 
-**Settings → Apps & Connectors → Advanced settings → Developer mode.**
+**Settings → Security and login → Developer mode**, switch it on. ChatGPT labels it an elevated-risk
+setting because it allows connectors OpenAI hasn't reviewed; this one is your own server.
 
-(The location has moved more than once; if it is not under Advanced settings,
-look for "Developer mode" elsewhere in Apps & Connectors.)
+(Older ChatGPT versions had it under **Apps & Connectors → Advanced settings**. The location moves
+from time to time; if neither matches, search Settings for "Developer mode".)
 
-## 2. Create the connector
+## 2. Add the server as a plugin
 
-**Apps & Connectors → Create**, then supply:
+**Settings → Plugins → +** (the plus button), then supply:
 
 - **Name:** Personal Context
 - **Description:** My shared memory, projects, lists and artifacts
-- **MCP server URL:** `https://<your-host>/mcp` — the `/mcp` path is required
-- **Authentication:** OAuth
+- **Connection:** the MCP server URL, `https://<your-host>/mcp` (the `/mcp` path is required)
+- **Authentication:** OAuth, if asked
+
+Create it, sign in (Approve, then Google), and check the list of discovered tools.
+
+To use it, start a new chat and add **Personal Context** from the tools menu (**+** under the message
+box). ChatGPT only uses a custom plugin in chats where it's switched on.
 
 ChatGPT connects over public HTTPS only. There is no stdio option, and a
-server on your laptop will not work without OpenAI's own tunnel — which is why
+server on your laptop will not work without OpenAI's own tunnel, which is why
 the server is put online (docs/guides/05-put-it-online.md) rather than run locally.
 
 ## 3. Custom instructions
@@ -34,7 +40,7 @@ Personal Context then becomes this app's only long-term memory, shared with the 
 ## 4. Skills / plugin packaging
 
 If your account has account-level Skills, upload the directories under
-`skills/` — at minimum `recall-context`, `checkpoint-session`, `manage-lists`,
+`skills/`: at minimum `recall-context`, `checkpoint-session`, `manage-lists`,
 `capture-artifacts`, `project-artifacts` and `research-to-obsidian`.
 
 If it does not, nothing is blocked. The same guidance is reachable three other
@@ -58,7 +64,7 @@ ways, in descending order of how reliably ChatGPT uses them:
 occasionally disappear from the directory and need re-adding; OAuth sometimes
 completes without the connector becoming available in chat until a reload. If
 tools stop appearing, disconnect and re-add the connector before assuming the
-server is at fault — `/healthz` and `personal-context-mcp check` will tell you
+server is at fault: `/healthz` and `personal-context-mcp check` will tell you
 whether it is.
 
 **Attachment limitation.** As with every provider, an uploaded file that is

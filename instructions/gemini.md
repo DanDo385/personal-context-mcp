@@ -4,20 +4,16 @@
 
 On a computer, at `gemini.google.com`:
 
-**Settings & help → Connected Apps → Custom apps → Add a custom app**, then
-enter `https://<your-host>/mcp`.
+**Settings & help → Connected Apps → Custom apps for Spark → Add a custom app**, then enter
+`https://<your-host>/mcp` and click **Next**.
 
-Requirements Google currently imposes:
+Custom apps are part of **Gemini Spark**, so you need:
 
-- a **personal** Google Account — work and school accounts cannot add custom
-  apps
+- a **Google AI Pro or Ultra** plan. **Google AI Plus and the free tier don't include it**: the
+  *Custom apps for Spark* section simply isn't shown in Connected Apps.
+- a **personal** Google Account (work and school accounts can't add custom apps)
 - **Keep Activity** switched on; custom apps are unavailable with it off
 - US-based, 18+, English
-
-The custom-app control appears in Connected Apps under the Spark heading, but
-adding a custom MCP server does **not** require a Spark subscription — it is
-available to ordinary personal Gemini accounts, which is why this setup uses
-it rather than requiring a Gem.
 
 Setup happens on desktop only. Once connected, the app is available in both
 Gemini web and the Gemini mobile app.
@@ -31,7 +27,7 @@ Registration. This server supports DCR, so you should not need it.
 **Settings & help → Saved info** (Gemini's persistent instruction field).
 Paste the block from `instructions/shared.md`.
 
-## 3. No Skills — and that is fine
+## 3. No Skills, and that is fine
 
 Consumer Gemini has no Agent Skills mechanism. This deployment does not
 require a Gem, because the point is for *ordinary* Gemini chats to share the
@@ -68,6 +64,6 @@ reasonable default and worth leaving on.
 **Attachment limitation.** Google Takeout does not export files generated in
 Gemini, and gives no filename to reference them by. Artifacts created in
 Gemini therefore need to be captured *during* the conversation through
-`artifact_save_bundle` / `artifact_save_text` — there is no later import path
+`artifact_save_bundle` / `artifact_save_text`; there is no later import path
 for them. This is the one provider where capturing at the time genuinely
 matters.
