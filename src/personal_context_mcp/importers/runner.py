@@ -292,8 +292,9 @@ class ImportRunner:
         if existing and existing["import_status"] == "imported":
             report.limitations.insert(
                 0,
-                "This exact archive has already been imported; re-running only "
-                "refreshed timestamps. Nothing was duplicated.",
+                "This archive was imported before. Conversations already in the "
+                "library were skipped, so nothing was duplicated; any not yet "
+                "imported (for example after a --limit trial) were added.",
             )
 
         source_id = await self._record_source(

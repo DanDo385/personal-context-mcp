@@ -90,6 +90,7 @@ Follow the guides in order. Each one ends with a check that tells you it worked.
 | 8 | [Set up your Obsidian notebook](docs/guides/08-obsidian.md) | 10 min |
 | 9 | [Import your old chats](docs/guides/09-import-your-history.md) | depends on how many |
 | 10 | [Build your wiki: links and maps](docs/guides/10-build-your-wiki.md) | 10 min |
+| 11 | [Gemini without custom apps](docs/guides/11-gemini-without-custom-apps.md) *(Google AI Plus or free)* | 15 min |
 
 The quickest possible start, if you already have the tools:
 

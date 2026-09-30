@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-c</string>
+    <string>__COMMAND__</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+  <!-- Weekly, Monday 09:00 local time. launchd runs a missed slot on wake. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>__WEEKDAY__</integer>
+    <key>Hour</key>
+    <integer>__HOUR__</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__LOGS__/gemini-sync.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOGS__/gemini-sync.err.log</string>
+</dict>
+</plist>
