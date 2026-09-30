@@ -109,6 +109,7 @@ async def test_extraction_writes_through_checkpoint_and_replaces_the_excerpt(
     assert request["fallbacks"] == "default"
     assert request["output_config"]["format"]["type"] == "json_schema"
     assert "Vault section for the note: wiki" in request["messages"][0]["content"]
+    assert "Existing projects: (none yet)" in request["messages"][0]["content"]
     assert report.notes == 1 and report.followups == 1
 
     summary = await services.db.fetchrow(

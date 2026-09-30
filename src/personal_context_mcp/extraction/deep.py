@@ -105,8 +105,9 @@ memory, so it must be accurate and self-contained.
 
 - summary: 3-8 sentences on what was worked out, written for someone who \
 cannot see the conversation. Past tense. No preamble.
-- project: the ongoing project this conversation is part of, named as the \
-person refers to it, or null if it is not project work.
+- project: the ongoing project this conversation is part of, or null if it is \
+not project work. If it belongs to one of the existing projects listed in the \
+request, use that project's exact name; only name a new project when none fits.
 - decisions: choices that were actually settled, with the reason if one was \
 given. Not options that were only discussed.
 - facts: durable information that should outlive the conversation: stated \
@@ -256,12 +257,13 @@ async def vault_targets(services: Services, *, limit: int, redo: bool = False) -
 
 
 def estimate_cost(candidates: list[Candidate], settings: Settings) -> dict[str, Any]:
-    """Rough upper bound, for deciding whether to run. ~3.5 chars per token;
-    ~2k output tokens including thinking per conversation."""
+    """Rough estimate, for deciding whether to run. ~3.5 chars per token;
+    ~7k output tokens per conversation (measured: the note itself is most of
+    it)."""
     input_tokens = sum(
         min(c.chars, settings.extraction_max_transcript_chars) for c in candidates
     ) / 3.5 + 900 * len(candidates)
-    output_tokens = 2000 * len(candidates)
+    output_tokens = 7000 * len(candidates)
     price_in, price_out = _PRICES.get(settings.extraction_model, (5.0, 25.0))
     return {
         "conversations": len(candidates),
@@ -334,8 +336,13 @@ class DeepExtractor:
         await self._client.close()
 
     async def _ask(
-        self, title: str | None, transcript: str, destination: str = "inbox"
+        self,
+        title: str | None,
+        transcript: str,
+        destination: str = "inbox",
+        projects: list[str] | None = None,
     ) -> tuple[Any, ExtractionPayload | None]:
+        known = ", ".join(f'"{name}"' for name in projects or []) or "(none yet)"
         response = await self._client.beta.messages.create(
             model=self._settings.extraction_model,
             max_tokens=16000,
@@ -356,7 +363,8 @@ class DeepExtractor:
                     "content": (
                         f"Conversation title: {title or '(untitled)'}\n"
                         f"Vault section for the note: {destination}: "
-                        f"{DESTINATION_CRITERIA.get(destination, '')}\n\n"
+                        f"{DESTINATION_CRITERIA.get(destination, '')}\n"
+                        f"Existing projects: {known}\n\n"
                         f"<transcript>\n{transcript}\n</transcript>"
                     ),
                 }
@@ -387,7 +395,16 @@ class DeepExtractor:
             [(m.role, redact(m.content)) for m in conversation.messages],
             self._settings.extraction_max_transcript_chars,
         )
-        response, payload = await self._ask(conversation.title, transcript, destination)
+        # Existing project names, so the same project is not split under two
+        # names ("AI agency website" vs "Interactive AI agency website").
+        projects = [
+            row["name"]
+            for row in await services.db.fetch(
+                "SELECT name FROM projects WHERE status IN ('active', 'paused') "
+                "ORDER BY last_active_at DESC NULLS LAST LIMIT 80"
+            )
+        ]
+        response, payload = await self._ask(conversation.title, transcript, destination, projects)
         usage = getattr(response, "usage", None)
         report.input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
         report.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
