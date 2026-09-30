@@ -125,6 +125,14 @@ class Settings(BaseSettings):
     #: Historical bulk imports promote far more conservatively than live work.
     import_auto_route_confidence: float = 0.93
     import_promote_to_vault: bool = False
+    #: Which imported conversations become vault notes (`vault-plan`). A
+    #: conversation qualifies when Jev's promote_to_obsidian (or its
+    #: deep_extraction) probability plus a recency bonus reaches the minimum.
+    #: The bonus halves every vault_recency_halflife_days, so recent work is
+    #: favoured. Deliberately generous: a rich, well-linked vault is the goal.
+    vault_min_score: float = 0.45
+    vault_recency_bonus: float = 0.2
+    vault_recency_halflife_days: float = 90.0
     #: Sensitivity every imported conversation starts at. The deterministic
     #: screen (importers/sensitivity.py) can only raise it. Set to
     #: highly_sensitive to keep an entire backfill inside the process.
