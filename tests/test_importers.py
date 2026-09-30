@@ -424,3 +424,21 @@ def test_derived_summary_is_an_excerpt_not_an_invention(tmp_path: Path) -> None:
     assert "Imported chatgpt conversation with 2 messages" in summary
     # Every claim in it is literally present in the transcript.
     assert "How should I share memory across assistants?" in summary
+
+
+def test_claude_names_conversations_the_export_left_blank(tmp_path: Path) -> None:
+    blank = {
+        "uuid": "blank-1",
+        "name": "",
+        "created_at": "2025-12-01T10:00:00Z",
+        "chat_messages": [
+            {"uuid": "b1", "sender": "human", "text": "", "content": []},
+            {"uuid": "b2", "sender": "assistant", "text": "", "content": []},
+        ],
+    }
+    archive = _zip(tmp_path / "cl.zip", {"conversations.json": [*CLAUDE_EXPORT, blank]})
+    importer = ClaudeImporter()
+    conversations = list(importer.parse(archive))
+    assert [c.provider_conversation_id for c in conversations] == ["claude-conv-1"]
+    assert len(importer.problems) == 1
+    assert "1 Claude conversations (created 2025-12-01 to 2025-12-01)" in importer.problems[0]
