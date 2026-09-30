@@ -139,33 +139,37 @@ async def extraction_candidates(
     min_importance: float = 0.0,
     redo: bool = False,
 ) -> list[Candidate]:
-    """Imported conversations whose latest pass-1 result said
-    ``deep_extract=yes``, most important first, excluding anything the
-    privacy policy keeps local."""
+    """Imported conversations whose latest pass-1 deep_extraction probability
+    is at least PC_EXTRACTION_MIN_PROBABILITY, most important first,
+    excluding anything the privacy policy keeps local."""
     rows = await services.db.fetch(
         """
         SELECT c.id, c.title,
                (SELECT coalesce(sum(length(m.content)), 0)
                   FROM messages m WHERE m.conversation_id = c.id) AS chars,
-               (ev.metadata->'routing'->>'importance')::float AS importance
+               (ev.metadata->'routing'->>'importance')::float AS importance,
+               ev.p
         FROM conversations c
         JOIN LATERAL (
-            SELECT e.metadata FROM classification_events e
+            SELECT e.metadata,
+                   coalesce((e.answers->'deep_extraction'->>'value')::float, 0) AS p
+            FROM classification_events e
             WHERE e.object_type = 'checkpoint' AND e.object_id = c.id AND NOT e.degraded
             ORDER BY e.created_at DESC LIMIT 1
         ) ev ON true
         WHERE c.imported
-          AND ev.metadata->'routing'->>'deep_extract' = 'yes'
+          AND ev.p >= $5
           AND coalesce((ev.metadata->'routing'->>'importance')::float, 0) >= $2
           AND NOT (c.sensitivity::text = ANY($3::text[]))
           AND ($4 OR NOT c.metadata ? 'extraction')
-        ORDER BY importance DESC NULLS LAST, c.started_at DESC NULLS LAST
+        ORDER BY importance DESC NULLS LAST, ev.p DESC, c.started_at DESC NULLS LAST
         LIMIT $1
         """,
         limit,
         min_importance,
         list(services.settings.no_external_sensitivity),
         redo,
+        services.settings.extraction_min_probability,
     )
     return [
         Candidate(

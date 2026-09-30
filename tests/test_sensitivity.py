@@ -75,3 +75,38 @@ def test_deep_extraction_noul_drives_the_triage_verdict() -> None:
     assert policy.route(yes).deep_extract is Verdict.YES
     assert policy.route(no).deep_extract is Verdict.NO
     assert policy.route(missing).deep_extract is Verdict.UNSURE
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Move the coins into self-custody before the exchange halts withdrawals.",
+        "The diagnosis of the build failure pointed at a stale lockfile.",
+        "Symptoms of the memory leak appear after an hour.",
+        "created_at 1790785531871 and id 4539578763621486123",  # ms timestamp, 19-digit id
+        "Order 5555 5555 5555 4443 is not Luhn-valid.",
+    ],
+)
+def test_technical_vocabulary_is_not_personal(text: str) -> None:
+    assert screen_texts([text]).level == "normal"
+
+
+@pytest.mark.parametrize(
+    "card", ["4111 1111 1111 1111", "5555 5555 5555 4444", "3782 822463 10005"]
+)
+def test_real_card_formats_are_caught(card: str) -> None:
+    assert screen_texts([f"card {card}"]).level == "highly_sensitive"
+
+
+def test_historical_imports_do_not_queue_destination_reviews() -> None:
+    """Destination only places vault notes, which historical imports never
+    write, so an unsure destination must not queue every import for review."""
+    unsure = ClassificationResult(
+        answers={"destination": Answer("choice", "research", confidence=0.6)},
+        classifier="jev",
+    )
+    historical = PolicyEngine(_settings(), historical_import=True).route(unsure)
+    live = PolicyEngine(_settings()).route(unsure)
+    assert "ambiguous_destination" not in historical.review_reasons
+    assert "ambiguous_destination" in live.review_reasons
+    assert historical.destination == "research"

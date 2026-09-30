@@ -57,9 +57,11 @@ _HIGHLY_SENSITIVE: tuple[tuple[str, re.Pattern[str]], ...] = (
 #: kept short on purpose: a false "private" costs little, a false "normal"
 #: leaks a diagnosis into a synced vault.
 _PRIVATE_TOPICS: dict[str, tuple[str, ...]] = {
+    # Phrases, not bare words: "diagnosis" and "symptoms" are everyday
+    # debugging vocabulary ("diagnosis of the build failure").
     "health": (
-        "diagnosis",
-        "diagnosed",
+        "diagnosed with",
+        "my diagnosis",
         "prescription",
         "prescribed",
         "my doctor",
@@ -67,8 +69,8 @@ _PRIVATE_TOPICS: dict[str, tuple[str, ...]] = {
         "therapy session",
         "psychiatrist",
         "antidepressant",
-        "medication",
-        "symptoms",
+        "my medication",
+        "my symptoms",
         "blood test",
         "biopsy",
     ),
@@ -76,7 +78,7 @@ _PRIVATE_TOPICS: dict[str, tuple[str, ...]] = {
         "my lawyer",
         "my attorney",
         "lawsuit",
-        "custody",
+        "child custody",  # bare "custody" is crypto self-custody
         "divorce",
         "subpoena",
         "settlement agreement",
@@ -115,10 +117,29 @@ def _luhn_ok(digits: str) -> bool:
     return total % 10 == 0
 
 
+def _is_card_number(digits: str) -> bool:
+    """Luhn alone is not enough: about one in ten random numbers pass it, and
+    13-digit millisecond timestamps and long ids are everywhere in technical
+    chats. Require a real card length for a real card network."""
+    if not _luhn_ok(digits) or len(set(digits)) < 2:
+        return False
+    if len(digits) == 15:
+        return digits[:2] in ("34", "37")  # American Express
+    if len(digits) == 16:
+        two, four = int(digits[:2]), int(digits[:4])
+        return (
+            digits[0] == "4"  # Visa
+            or 51 <= two <= 55
+            or 2221 <= four <= 2720  # Mastercard
+            or digits.startswith(("6011", "65"))
+            or 644 <= int(digits[:3]) <= 649  # Discover
+        )
+    return False
+
+
 def _has_card_number(text: str) -> bool:
     for match in _CARD_CANDIDATE.finditer(text):
-        digits = re.sub(r"\D", "", match.group())
-        if 13 <= len(digits) <= 19 and len(set(digits)) > 1 and _luhn_ok(digits):
+        if _is_card_number(re.sub(r"\D", "", match.group())):
             return True
     return False
 

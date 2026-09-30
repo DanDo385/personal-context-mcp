@@ -63,6 +63,9 @@ class Routing:
     confidence: float
     #: Pass-1 triage: whether a frontier model should read the full transcript.
     deep_extract: Verdict = Verdict.UNSURE
+    #: The raw deep_extraction probability. Triage ranks by this rather than
+    #: by the Noul yes/no bands, which are tuned for acting, not for ranking.
+    deep_extract_p: float = 0.5
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -81,6 +84,7 @@ class Routing:
             "action_taken": self.action_taken,
             "confidence": round(self.confidence, 3),
             "deep_extract": self.deep_extract.value,
+            "deep_extract_p": round(self.deep_extract_p, 3),
         }
 
 
@@ -131,9 +135,16 @@ class PolicyEngine:
 
         destination, destination_conf = result.choice("destination")
         destination_band = self.band(destination_conf, action="visible")
+        # Destination only decides where a vault note goes. When nothing may be
+        # promoted to the vault (historical imports, by default), an uncertain
+        # destination is not worth a person's review: it would queue every
+        # imported conversation.
+        destination_matters = self._allow_vault_promotion
         if destination and destination_band is Band.DEFER:
-            destination, review_reasons = "inbox", [*review_reasons, "ambiguous_destination"]
-        elif destination and destination_band is Band.REVIEW:
+            destination = "inbox"
+            if destination_matters:
+                review_reasons.append("ambiguous_destination")
+        elif destination and destination_band is Band.REVIEW and destination_matters:
             review_reasons.append("ambiguous_destination")
 
         importance, _ = result.score("importance", levels=len(IMPORTANCE_LEVELS))
@@ -148,7 +159,8 @@ class PolicyEngine:
         creates_task = self.verdict(result.noul("creates_task", 0.0))
         sensitive = self.verdict(result.noul("sensitive", 0.0))
         explicit_review = self.verdict(result.noul("needs_human_review", 0.0))
-        deep_extract = self.verdict(result.noul("deep_extraction", 0.5))
+        deep_extract_p = result.noul("deep_extraction", 0.5)
+        deep_extract = self.verdict(deep_extract_p)
 
         if explicit_review is Verdict.YES:
             review_reasons.append("classifier_requested_review")
@@ -198,6 +210,7 @@ class PolicyEngine:
             action_taken=action,
             confidence=confidence,
             deep_extract=deep_extract,
+            deep_extract_p=deep_extract_p,
         )
 
     def artifact_project(self, result: ClassificationResult) -> tuple[str | None, Band]:
