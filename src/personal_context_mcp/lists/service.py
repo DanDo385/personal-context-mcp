@@ -17,6 +17,8 @@ import asyncpg
 from personal_context_mcp.db.pool import Database
 from personal_context_mcp.errors import NotFoundError, ValidationError
 from personal_context_mcp.models import ListItemRecord, ListRecord
+from personal_context_mcp.obsidian.paths import VaultPaths
+from personal_context_mcp.obsidian.queue import SyncQueue
 from personal_context_mcp.util import normalized_sha256, slugify
 
 
@@ -51,8 +53,51 @@ def _item_record(row: asyncpg.Record) -> ListItemRecord:
 
 
 class ListService:
-    def __init__(self, db: Database) -> None:
+    def __init__(
+        self,
+        db: Database,
+        *,
+        sync_queue: SyncQueue | None = None,
+        vault_paths: VaultPaths | None = None,
+    ) -> None:
         self._db = db
+        # With both set, every change to a list re-queues its vault file, so
+        # lists edited from any provider are current in Obsidian. The worker
+        # renders the file from the database when it leases the job, after
+        # any surrounding transaction has committed.
+        self._sync_queue = sync_queue
+        self._vault_paths = vault_paths
+
+    async def queue_render(self, list_id: UUID) -> None:
+        if self._sync_queue is None or self._vault_paths is None:
+            return
+        row = await self._db.fetchrow(
+            """
+            SELECT l.slug, l.vault_path, p.slug AS project_slug
+            FROM lists l LEFT JOIN projects p ON p.id = l.project_id
+            WHERE l.id = $1
+            """,
+            list_id,
+        )
+        if row is None:
+            return
+        path = row["vault_path"] or self._vault_paths.list_view(
+            row["slug"], project_slug=row["project_slug"]
+        )
+        if not row["vault_path"]:
+            await self._db.execute("UPDATE lists SET vault_path = $2 WHERE id = $1", list_id, path)
+        await self._sync_queue.enqueue(
+            job_type="write_list",
+            object_type="list",
+            object_id=list_id,
+            vault_path=path,
+            payload={"list_id": str(list_id)},
+        )
+
+    async def _queue_for_item(self, item_id: UUID) -> None:
+        list_id = await self._db.fetchval("SELECT list_id FROM list_items WHERE id = $1", item_id)
+        if list_id is not None:
+            await self.queue_render(list_id)
 
     # ---------------------------------------------------------------- lists
 
@@ -121,6 +166,7 @@ class ListService:
         )
         if row is None:  # pragma: no cover - the upsert always returns a row
             raise RuntimeError("list upsert returned no row")
+        await self.queue_render(row["id"])
         return row["id"], bool(row["created"])
 
     async def get_or_create(
@@ -178,6 +224,7 @@ class ListService:
     async def archive(self, reference: str) -> UUID:
         list_id = await self.require(reference)
         await self._db.execute("UPDATE lists SET status = 'archived' WHERE id = $1", list_id)
+        await self.queue_render(list_id)
         return list_id
 
     # ---------------------------------------------------------------- items
@@ -319,6 +366,7 @@ class ListService:
             due_date,
             notes,
         )
+        await self._queue_for_item(item_id)
         return dict(before)
 
     async def complete_item(
@@ -330,6 +378,9 @@ class ListService:
         self, item_id: UUID, *, target_list_id: UUID, conn: asyncpg.Connection | None = None
     ) -> None:
         executor = conn or self._db
+        source_list_id = await executor.fetchval(
+            "SELECT list_id FROM list_items WHERE id = $1", item_id
+        )
         position = await executor.fetchval(
             "SELECT coalesce(max(position), 0) + 1 FROM list_items WHERE list_id = $1",
             target_list_id,
@@ -351,6 +402,8 @@ class ListService:
         )
         if moved is None:
             await executor.execute("DELETE FROM list_items WHERE id = $1", item_id)
+        for affected in {source_list_id, target_list_id} - {None}:
+            await self.queue_render(affected)
 
     async def recent_items(self, *, limit: int = 20) -> list[ListItemRecord]:
         rows = await self._db.fetch(

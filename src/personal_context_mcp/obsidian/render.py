@@ -7,6 +7,7 @@ recovered from the item text.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -109,6 +110,12 @@ def render_note(
     mocs: list[tuple[str, str]] | None = None,
 ) -> str:
     """``related`` is (file stem, title, relation); ``mocs`` is (stem, title)."""
+    meta = note.get("metadata") or {}
+    if isinstance(meta, str):
+        meta = json.loads(meta or "{}")
+    tags = ["personal-context-mcp/note", *[t for t in meta.get("tags") or [] if isinstance(t, str)]]
+    if note.get("source_provider"):
+        tags.append(f"from/{note['source_provider']}")
     front = _frontmatter(
         {
             "pc_type": "note",
@@ -121,7 +128,8 @@ def render_note(
             "provenance": note.get("provenance"),
             "version": note.get("version"),
             "updated": note.get("updated_at"),
-            "tags": ["personal-context-mcp/note"],
+            "source_date": meta.get("source_date"),
+            "tags": tags,
         }
     )
     parts = [front, "", f"# {note['title']}", "", note["content"].strip(), ""]
@@ -149,6 +157,9 @@ def render_note(
             else:
                 generated.append(f"- {citation}")
         generated.append("")
+    if note.get("source_provider") and note.get("source_conversation_id"):
+        when = f" on {meta['source_date']}" if meta.get("source_date") else ""
+        generated += [f"*From a {note['source_provider'].title()} conversation{when}.*", ""]
     if generated:
         parts += ["", GENERATED_START, "", *generated, GENERATED_END, ""]
     return "\n".join(parts)
