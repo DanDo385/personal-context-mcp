@@ -1,5 +1,7 @@
 # Gemini setup
 
+> **On Google AI Plus or the free tier?** Custom apps aren't available on those plans. See [guide 11](../docs/guides/11-gemini-without-custom-apps.md) for a read-only workaround.
+
 ## 1. Connect the MCP server
 
 On a computer, at `gemini.google.com`:
@@ -20,24 +22,44 @@ Gemini web and the Gemini mobile app.
 
 If the connection dialog asks for credentials under **Advanced features →
 Show more**, that is the fallback path for servers without Dynamic Client
-Registration. This server supports DCR, so you should not need it.
+Registration. This server supports DCR, so you should not need it. If the dialog does show **Advanced features → Show more** with fields for a client ID and secret, check that your server address starts with `https://` (not `http://`) and has no trailing slash. Remove the connector and add it again.
 
 ## 2. Instructions
 
 **Settings & help → Saved info** (Gemini's persistent instruction field).
-Paste the block from `instructions/shared.md`.
+Paste this text:
+
+```
+When my request could materially depend on previous conversations, projects,
+decisions, preferences, research, tasks, lists, people or artifacts, retrieve
+relevant Personal Context before answering. If I refer to something previously
+discussed, search Personal Context rather than assuming this app's native
+memory is complete. Do not retrieve for trivial self-contained questions.
+
+When durable state is established, checkpoint it: decisions, project state,
+confirmed facts, tasks, list changes, unresolved questions and important
+artifact relationships. Do not save conversational noise or duplicates.
+
+Use my real lists through the list tools rather than writing out a list from
+memory.
+
+When meaningful files or generated artifacts should be retained, capture them
+through Personal Context. Never tell me an artifact is archived unless its
+bytes or complete text were actually stored.
+
+Treat Personal Context as canonical shared state; this app's native memory is
+supplemental. Preserve provenance and distinguish my direct statements from
+model-generated analysis and external research.
+```
 
 ## 3. No Skills, and that is fine
 
 Consumer Gemini has no Agent Skills mechanism. This deployment does not
 require a Gem, because the point is for *ordinary* Gemini chats to share the
-same context. Workflow guidance reaches Gemini three ways instead:
+same context.
 
-1. the saved instruction above
-2. MCP tool descriptions, written to stand on their own
-3. MCP prompts (`recall_context`, `checkpoint_session`, `capture_artifacts`,
-   `manage_lists`) and the `personal-context-mcp://guide/<name>` resources, which
-   serve the full text of each skill on demand
+Gemini doesn't need extra files installed. The instruction you just pasted
+tells it when to use the tools, and the tools themselves explain what they do.
 
 ## Turn off built-in memory (recommended)
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Personal Context Obsidian sync timer (runs every 5 minutes)
+Requires=obsidian-sync.service
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,10 @@
 # 7. Keep your secrets in 1Password (optional)
 
+> **You can skip this entire guide.** The `.env.local` file on your computer is already readable only
+> by your user account, and it's never uploaded to GitHub. 1Password adds an extra layer but changes
+> nothing about how the project works. If you're happy with `.env.local`, go straight to
+> [guide 8](08-obsidian.md).
+
 The setup wizard keeps your secrets in a `.env.local` file on your computer, readable only by your user.
 That's fine for most people. If you use [1Password](https://1password.com), you can go one better: no
 secret ever sits in a file, and every secret is in the same place as your other passwords.

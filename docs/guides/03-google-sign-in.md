@@ -30,6 +30,10 @@ a credit card.
    lock out personal Gmail addresses.)
 4. **Contact information:** your email. Agree to the policy and click **Create**.
 
+> **Google's menus move around every few months.** If the path above doesn't match what you see,
+> search the page for "branding", "OAuth consent screen", or "audience". The fields you need are the
+> same regardless of where Google puts them.
+
 ## Step 3: Publish it (important)
 
 1. Open **Google Auth Platform → Audience**.
@@ -62,6 +66,11 @@ only asks for your name and email address.
 ✅ A box shows your **Client ID** (ends in `.apps.googleusercontent.com`) and **Client secret** (starts
 with `GOCSPX-`). Copy both now. You can see the ID again later, but newer Google consoles only show the
 secret once. If you lose it, just add a new secret to the same client.
+
+> **If you can't find where to copy the secret:** Google sometimes hides it behind a "Show" button
+> or buries it in a separate tab after creation. Look for "Client secret" or "Additional information".
+> If the box disappeared, go to **Clients** → click your client's name → **Client secret** → you may
+> need to create a new one.
 
 ## Where to put them
 

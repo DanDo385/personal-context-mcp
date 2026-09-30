@@ -77,20 +77,21 @@ See [Privacy and costs](docs/privacy-and-costs.md) for details.
 
 Follow the guides in order. Each one ends with a check that tells you it worked.
 
-| Step | Guide | Time |
-| --- | --- | --- |
-| 0 | [Before you start](docs/guides/00-before-you-start.md): what you'll end up with, and the few words worth knowing | 5 min |
-| 1 | [Install the tools](docs/guides/01-install-the-tools.md) | 10 min |
-| 2 | [Try it on your computer](docs/guides/02-try-it-locally.md) *(optional but reassuring)* | 10 min |
-| 3 | [Create your Google sign-in](docs/guides/03-google-sign-in.md) | 10 min |
-| 4 | [Create your database](docs/guides/04-database.md) | 10 min |
-| 5 | [Put it online](docs/guides/05-put-it-online.md) | 15 min |
-| 6 | [Connect ChatGPT, Claude, Gemini and Grok](docs/guides/06-connect-your-ai-apps.md) | 5 min per app |
-| 7 | [Keep your secrets in 1Password](docs/guides/07-keep-secrets-in-1password.md) *(optional)* | 10 min |
-| 8 | [Set up your Obsidian notebook](docs/guides/08-obsidian.md) | 10 min |
-| 9 | [Import your old chats](docs/guides/09-import-your-history.md) | depends on how many |
-| 10 | [Build your wiki: links and maps](docs/guides/10-build-your-wiki.md) | 10 min |
-| 11 | [Gemini without custom apps](docs/guides/11-gemini-without-custom-apps.md) *(Google AI Plus or free)* | 15 min |
+| Step | Guide | Time | Required? |
+| --- | --- | --- | --- |
+| 0 | [Before you start](docs/guides/00-before-you-start.md): what you'll end up with, and the few words worth knowing | 5 min | ✅ Read first |
+| 1 | [Install the tools](docs/guides/01-install-the-tools.md) | 10 min | ✅ |
+| 2 | [Try it on your computer](docs/guides/02-try-it-locally.md) | 10 min | Optional |
+| 3 | [Create your Google sign-in](docs/guides/03-google-sign-in.md) | 10 min | ✅ |
+| 4 | [Create your database](docs/guides/04-database.md) | 10 min | ✅ |
+| 5 | [Put it online](docs/guides/05-put-it-online.md) | 15 min | ✅ |
+| 6 | [Connect ChatGPT, Claude, Gemini and Grok](docs/guides/06-connect-your-ai-apps.md) | 5 min per app | ✅ |
+| 7 | [Keep your secrets in 1Password](docs/guides/07-keep-secrets-in-1password.md) | 10 min | Optional |
+| 8 | [Set up your Obsidian notebook](docs/guides/08-obsidian.md) | 10 min | Optional |
+| 9 | [Import your old chats](docs/guides/09-import-your-history.md) | depends on how many | Optional |
+| 10 | [Build your wiki: links and maps](docs/guides/10-build-your-wiki.md) | 10 min | Optional |
+| 11 | [Gemini without custom apps](docs/guides/11-gemini-without-custom-apps.md) | 15 min | Only if on Gemini Plus/free |
+| 12 | [Daily use: what to expect](docs/guides/12-daily-use.md) | 5 min | Read after connecting |
 
 The quickest possible start, if you already have the tools:
 

@@ -18,14 +18,34 @@ configured by hand.
 ## 2. Custom instructions
 
 Settings → **Profile → What personal preferences should Claude consider**.
-Paste the block from `instructions/shared.md`.
-
-Claude-specific addition:
+Paste this text:
 
 ```
-When you use Personal Context, say briefly what you retrieved or saved, so I
-can tell memory from inference.
+When my request could materially depend on previous conversations, projects,
+decisions, preferences, research, tasks, lists, people or artifacts, retrieve
+relevant Personal Context before answering. If I refer to something previously
+discussed, search Personal Context rather than assuming this app's native
+memory is complete. Do not retrieve for trivial self-contained questions.
+
+When durable state is established, checkpoint it: decisions, project state,
+confirmed facts, tasks, list changes, unresolved questions and important
+artifact relationships. Do not save conversational noise or duplicates.
+
+Use my real lists through the list tools rather than writing out a list from
+memory.
+
+When meaningful files or generated artifacts should be retained, capture them
+through Personal Context. Never tell me an artifact is archived unless its
+bytes or complete text were actually stored.
+
+Treat Personal Context as canonical shared state; this app's native memory is
+supplemental. Preserve provenance and distinguish my direct statements from
+model-generated analysis and external research.
 ```
+
+> ⚠️ **Also paste this extra line after the shared instruction:**
+>
+> When you use Personal Context, say briefly what you retrieved or saved, so I can tell memory from inference.
 
 ## 3. Skills
 
@@ -34,14 +54,6 @@ Claude supports Agent Skills. Install the workflow skills from `skills/`:
 - Claude.ai → **Settings → Capabilities → Skills → Upload skill**, once per
   directory in `skills/`, or
 - for Claude Code in this repository, they are already on disk under `skills/`
-
-Keep these separate from TypeSafe's official SDK skill, which is a development
-aid for this repository, not a runtime workflow:
-
-```bash
-claude plugin marketplace add typesafe-ai/skills
-claude plugin install typesafe@typesafe-ai
-```
 
 ## Turn off built-in memory (recommended)
 
@@ -65,3 +77,15 @@ Personal Context then becomes this app's only long-term memory, shared with the 
 the model but are not delivered to MCP tools as bytes. Claude will call
 `artifact_register_reference` for them, which records that they existed with
 status `pending_import`. Import your Claude export to fill in the bytes.
+
+## For developers only
+
+Skip this unless you're working on the personal-context-mcp code itself.
+
+Keep these separate from TypeSafe's official SDK skill, which is a development
+aid for this repository, not a runtime workflow:
+
+```bash
+claude plugin marketplace add typesafe-ai/skills
+claude plugin install typesafe@typesafe-ai
+```
