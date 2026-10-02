@@ -29,7 +29,30 @@ the server is put online (docs/guides/05-put-it-online.md) rather than run local
 ## 3. Custom instructions
 
 **Settings → Personalization → Custom instructions**, into "Anything else
-ChatGPT should know". Paste the block from `instructions/shared.md`.
+ChatGPT should know". Paste this text:
+
+```
+When my request could materially depend on previous conversations, projects,
+decisions, preferences, research, tasks, lists, people or artifacts, retrieve
+relevant Personal Context before answering. If I refer to something previously
+discussed, search Personal Context rather than assuming this app's native
+memory is complete. Do not retrieve for trivial self-contained questions.
+
+When durable state is established, checkpoint it: decisions, project state,
+confirmed facts, tasks, list changes, unresolved questions and important
+artifact relationships. Do not save conversational noise or duplicates.
+
+Use my real lists through the list tools rather than writing out a list from
+memory.
+
+When meaningful files or generated artifacts should be retained, capture them
+through Personal Context. Never tell me an artifact is archived unless its
+bytes or complete text were actually stored.
+
+Treat Personal Context as canonical shared state; this app's native memory is
+supplemental. Preserve provenance and distinguish my direct statements from
+model-generated analysis and external research.
+```
 
 ## Turn off built-in memory (recommended)
 
@@ -42,30 +65,23 @@ Personal Context then becomes this app's only long-term memory, shared with the 
 If your account has account-level Skills, upload the directories under
 `skills/`: at minimum `recall-context`, `checkpoint-session`, `manage-lists`,
 `capture-artifacts`, `project-artifacts` and `research-to-obsidian`.
-
-If it does not, nothing is blocked. The same guidance is reachable three other
-ways, in descending order of how reliably ChatGPT uses them:
-
-1. the custom instruction above
-2. MCP tool descriptions, which are written to be self-sufficient
-3. MCP prompts and the `personal-context-mcp://guide/<name>` resources
+To check: go to Settings. If you see a "Skills" section, upload the folders
+listed above. If you don't see it, skip this section: your custom instruction
+covers the same ground.
 
 ## 5. Surfaces and limitations
 
 | | |
 | --- | --- |
-| Transport | Streamable HTTP and SSE |
+| Transport | standard web (works automatically) |
 | Auth | OAuth (DCR supported) |
 | Tools | all 48 |
 | Write approval | ChatGPT confirms write actions |
 | Mobile (iOS) | connectors configured on web are available in the app |
 
-**Known rough edges**, reported by developers through 2026: custom connectors
-occasionally disappear from the directory and need re-adding; OAuth sometimes
-completes without the connector becoming available in chat until a reload. If
-tools stop appearing, disconnect and re-add the connector before assuming the
-server is at fault: `/healthz` and `personal-context-mcp check` will tell you
-whether it is.
+**Known rough edges.** Occasionally a connector disappears from the list.
+If your tools stop working: remove and re-add the connector (30 seconds).
+Your server is almost certainly fine; check `/healthz` to confirm.
 
 **Attachment limitation.** As with every provider, an uploaded file that is
 not delivered to tools as bytes is recorded with

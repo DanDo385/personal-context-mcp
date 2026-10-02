@@ -105,6 +105,18 @@ If you own a domain, you can use an address like `https://memory.yourname.com`:
 2. At your domain's DNS provider, add a **CNAME** record: name `memory`, value `cname.vercel-dns.com`.
    On Cloudflare, set it to **DNS only** (grey cloud): Cloudflare's proxy can break the live
    connection the AI apps use.
+
+   **Where to add it, by provider:**
+
+   | Provider | Where | Type | Name | Target / Value |
+   | --- | --- | --- | --- | --- |
+   | **Cloudflare** | Your domain → DNS → Records → Add record | CNAME | `memory` | `cname.vercel-dns.com` |
+   | **Namecheap** | Domain List → Manage → Advanced DNS → Add new record | CNAME Record | `memory` | `cname.vercel-dns.com` |
+   | **GoDaddy** | My Products → DNS → Add | CNAME | `memory` | `cname.vercel-dns.com` |
+   | **Google Domains** | DNS → Custom resource records → Manage custom records | CNAME | `memory` | `cname.vercel-dns.com` |
+
+   After adding it, wait a few minutes for the change to spread. You can check at
+   <https://www.whatsmydns.net> (type `memory.yourname.com`).
 3. Change `PC_BASE_URL` and `PC_ALLOWED_HOSTS` in `.env.local` to the new address, run
    `deploy/vercel-env.sh .env.local` again, and add `https://memory.yourname.com/auth/callback` to your
    Google client's redirect URIs.

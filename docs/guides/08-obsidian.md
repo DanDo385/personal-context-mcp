@@ -18,6 +18,10 @@ it once, so everything else can use `~/Obsidian`:
 ln -s ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents ~/Obsidian
 ```
 
+> **Tip: use Tab to fill the path.** Type `ln -s ~/Library/Mobile` then press **Tab**, and your terminal
+> fills in the rest. If it doesn't, you haven't installed Obsidian on this Mac yet, or iCloud Drive
+> isn't set up.
+
 (Obsidian must be installed on the Mac for that iCloud folder to exist. If `~/Obsidian` already exists,
 skip the shortcut and, in the next step, use the full address instead:
 `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal Context`.) Your notes are stored in iCloud and show up
@@ -63,23 +67,25 @@ deploy/install-worker.sh
 if it ever stops. To stop it for good:
 `launchctl bootout gui/$(id -u)/com.personal-context-mcp.obsidian-sync`.
 
-**Linux (systemd):** create `~/.config/systemd/user/obsidian-sync.service`:
+**Linux (systemd):**
 
-```ini
-[Unit]
-Description=personal-context-mcp Obsidian helper
-
-[Service]
-WorkingDirectory=%h/personal-context-mcp
-ExecStart=%h/personal-context-mcp/.venv/bin/obsidian-sync run
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=default.target
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/obsidian-sync.service ~/.config/systemd/user/
+cp deploy/obsidian-sync.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now obsidian-sync.timer
 ```
 
-then `systemctl --user enable --now obsidian-sync`.
+✅ Check it's running: `systemctl --user status obsidian-sync`. To see recent writes:
+`journalctl --user -u obsidian-sync -n 20`.
+
+The timer runs the helper every 5 minutes. To stop: `systemctl --user disable --now obsidian-sync.timer`.
+Logs: `journalctl --user -u obsidian-sync -f`.
+
+(Tip: if `systemctl --user` says "Failed to connect to bus", your Linux setup doesn't have a user
+session manager. Use `systemctl` with `sudo` instead: copy the files to `/etc/systemd/system/` and
+replace `%h` in the service file with your full home directory path.)
 
 **Windows (WSL):** run `uv run obsidian-sync run` in a terminal you leave open.
 

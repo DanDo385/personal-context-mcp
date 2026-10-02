@@ -1,0 +1,18 @@
+[Unit]
+Description=Personal Context Obsidian sync worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/uv run obsidian-sync run
+WorkingDirectory=%h/personal-context-mcp
+Restart=on-failure
+RestartSec=60
+Environment="PATH=%h/.cargo/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Load environment from .env.local or 1Password
+EnvironmentFile=-%h/personal-context-mcp/.env.local
+
+[Install]
+WantedBy=default.target
