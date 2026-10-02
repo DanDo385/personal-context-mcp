@@ -229,7 +229,7 @@ reranked by importance, recency and project association, then packed to a token
 budget.
 
 ```
-context_bootstrap(user_message, token_budget=2500, project=None)
+context_bootstrap(user_message, token_budget=1200, project=None)
 context_search(query, limit, project, provider, include_messages=False)
 context_for_topic(topic, token_budget, project)
 context_recent(limit, provider, project)

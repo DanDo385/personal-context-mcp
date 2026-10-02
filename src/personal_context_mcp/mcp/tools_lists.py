@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastmcp import FastMCP
@@ -12,8 +12,11 @@ from pydantic import Field
 
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.auth.principal import current_principal
-from personal_context_mcp.models import ListItemRecord, ListRecord
+from personal_context_mcp.mcp.compact import list_item, list_summary
+from personal_context_mcp.models import ListItemRecord
 from personal_context_mcp.services import get_services
+
+Detail = Literal["compact", "full"]
 
 
 def register(mcp: FastMCP) -> None:
@@ -28,15 +31,10 @@ def register(mcp: FastMCP) -> None:
             str, Field(description="Words from the list name. Empty returns every list.")
         ] = "",
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
-    ) -> list[ListRecord]:
-        """Find the user's existing lists.
-
-        ALWAYS call this before list_create. The user keeps many lists and they
-        rarely have the exact name used in conversation - "my reading list" may
-        be stored as "Books to read". Creating a near-duplicate splits a list
-        in two and is hard to undo.
-        """
-        return await get_services().lists.search(query, limit=limit)
+    ) -> list[dict]:
+        """Find existing lists before creating one. A near-duplicate splits a list."""
+        records = await get_services().lists.search(query, limit=limit)
+        return [list_summary(record) for record in records]
 
     @mcp.tool(
         name="list_get",
@@ -50,17 +48,26 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="open, done, dropped, blocked, or null for all."),
         ] = "open",
-        limit: Annotated[int, Field(ge=1, le=500)] = 200,
+        limit: Annotated[int, Field(ge=1, le=100)] = 40,
+        detail: Annotated[
+            Detail,
+            Field(description="compact drops nulls and timestamps. full returns every field."),
+        ] = "compact",
     ) -> dict:
-        """One list with its items. Item ids returned here are stable - use
-        them with list_complete_item and list_move_item rather than matching
-        on text."""
+        """One list and its items. Item ids are stable; use them to complete or move.
+
+        Compact by default. Raise limit only if shown is less than open.
+        """
         services = get_services()
         record = await services.lists.get(list)
         items = await services.lists.items(list, status=status, limit=limit)
         return {
-            "list": record.model_dump(mode="json"),
-            "items": [i.model_dump(mode="json") for i in items],
+            "list": record.slug,
+            "name": record.name,
+            "open": record.open_items,
+            "shown": len(items),
+            "truncated": record.open_items > len(items) if status in (None, "open") else False,
+            "items": [list_item(item, detail=detail) for item in items],
         }
 
     @mcp.tool(
@@ -77,10 +84,11 @@ def register(mcp: FastMCP) -> None:
             Field(description="task, reading, shopping, idea, people or general."),
         ] = "general",
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
-    ) -> ListRecord:
-        """Create a new list. Call list_search first - only create when nothing
-        existing is a reasonable home. An existing list with the same slug is
-        returned unchanged rather than duplicated."""
+    ) -> dict:
+        """Create a list only after list_search finds no reasonable home.
+
+        An existing list with the same slug is returned unchanged.
+        """
         services = get_services()
         list_id, created = await services.lists.create(
             name=name,
@@ -95,7 +103,8 @@ def register(mcp: FastMCP) -> None:
             object_id=list_id,
             resulting_version={"name": name, "created": created},
         )
-        return await services.lists.get(str(list_id))
+        record = await services.lists.get(str(list_id))
+        return {**list_summary(record), "created": created}
 
     @mcp.tool(
         name="list_add_item",
@@ -109,12 +118,8 @@ def register(mcp: FastMCP) -> None:
         notes: Annotated[str | None, Field(description="Extra detail.")] = None,
         priority: Annotated[int, Field(ge=0, le=5)] = 0,
         due_date: date | None = None,
-    ) -> ListItemRecord:
-        """Add one item to an existing list.
-
-        An item whose text matches one already on the list updates it instead
-        of adding a second copy.
-        """
+    ) -> dict:
+        """Add one item. Matching text updates the existing item instead of duplicating."""
         services = get_services()
         principal = current_principal()
         list_id = await services.lists.require(list)
@@ -138,7 +143,7 @@ def register(mcp: FastMCP) -> None:
         match = next((i for i in items if i.id == item_id), None)
         if match is None:  # pragma: no cover - the row was just written
             raise RuntimeError("Item disappeared immediately after insert")
-        return match
+        return {**list_item(match), "created": created}
 
     @mcp.tool(
         name="list_update_item",
@@ -170,7 +175,7 @@ def register(mcp: FastMCP) -> None:
             object_id=item_id,
             previous_version=before,
         )
-        return {"item_id": str(item_id), "previous": before}
+        return {"updated": True, "item_id": str(item_id)}
 
     @mcp.tool(
         name="list_complete_item",
@@ -182,12 +187,7 @@ def register(mcp: FastMCP) -> None:
         list: Annotated[str, Field(description="List slug or name.")],
         item: Annotated[
             str,
-            Field(
-                description=(
-                    "Item id from list_get, or the item's exact text. Prefer the "
-                    "id - matching on text can hit the wrong item."
-                )
-            ),
+            Field(description="Item id from list_get, or the item's exact text. Prefer the id."),
         ],
     ) -> dict:
         """Mark an item done."""
@@ -195,10 +195,7 @@ def register(mcp: FastMCP) -> None:
         list_id = await services.lists.require(list)
         item_id = await services.lists.resolve_item(list_id, item)
         if item_id is None:
-            return {
-                "completed": False,
-                "reason": f"No item on {list!r} matches {item!r}. Call list_get to see ids.",
-            }
+            return {"completed": False, "reason": "No matching item. Call list_get for ids."}
         before = await services.lists.complete_item(item_id)
         await services.audit.record(
             tool="list_complete_item",
@@ -218,7 +215,7 @@ def register(mcp: FastMCP) -> None:
         item_id: Annotated[UUID, Field(description="Item id from list_get.")],
         target_list: Annotated[str, Field(description="Destination list slug or name.")],
     ) -> dict:
-        """Move an item between lists, e.g. from 'someday' to 'active'."""
+        """Move an item between lists."""
         services = get_services()
         target_id = await services.lists.require(target_list)
         await services.lists.move_item(item_id, target_list_id=target_id)
@@ -257,9 +254,12 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.LISTS_READ),
         annotations={"readOnlyHint": True},
     )
-    async def list_recent(limit: Annotated[int, Field(ge=1, le=100)] = 20) -> list[ListItemRecord]:
+    async def list_recent(
+        limit: Annotated[int, Field(ge=1, le=50)] = 15,
+    ) -> list[dict]:
         """Recently changed items across every list."""
-        return await get_services().lists.recent_items(limit=limit)
+        items = await get_services().lists.recent_items(limit=limit)
+        return [_with_list(item) for item in items]
 
     @mcp.tool(
         name="list_find_item",
@@ -269,8 +269,13 @@ def register(mcp: FastMCP) -> None:
     )
     async def list_find_item(
         query: Annotated[str, Field(description="Words from the item.")],
-        limit: Annotated[int, Field(ge=1, le=50)] = 20,
+        limit: Annotated[int, Field(ge=1, le=30)] = 10,
         status: Annotated[str | None, Field(description="Filter by status.")] = None,
-    ) -> list[ListItemRecord]:
+    ) -> list[dict]:
         """Search items across every list, when you know the item but not the list."""
-        return await get_services().lists.search_items(query, limit=limit, status=status)
+        items = await get_services().lists.search_items(query, limit=limit, status=status)
+        return [_with_list(item) for item in items]
+
+
+def _with_list(item: ListItemRecord) -> dict:
+    return {**list_item(item), "list": item.list_slug}
