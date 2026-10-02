@@ -96,6 +96,10 @@ def iter_safe_entries(
                 raise ArchiveSecurityError(
                     f"Archive contains a symlink, which is not extracted: {info.filename!r}"
                 )
+            if name_filter is not None and not name_filter(info.filename):
+                # Never expanded, so its size and ratio cannot hurt us (a ChatGPT
+                # export carries a 250 MB chat.html nobody asked for).
+                continue
             if info.file_size > limits.max_entry_bytes:
                 raise ArchiveSecurityError(
                     f"Archive member {info.filename!r} declares "
@@ -109,9 +113,6 @@ def iter_safe_entries(
                         f"{ratio:.0f}:1, above the limit of "
                         f"{limits.max_compression_ratio}:1. Refusing to expand it."
                     )
-            if name_filter is not None and not name_filter(info.filename):
-                continue
-
             # Read in bounded chunks and enforce against the *actual* bytes,
             # because the declared size in the header is attacker-controlled.
             chunks: list[bytes] = []

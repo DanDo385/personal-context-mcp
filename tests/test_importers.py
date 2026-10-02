@@ -6,6 +6,7 @@ import json
 import zipfile
 from pathlib import Path
 
+from personal_context_mcp.artifacts.archives import ArchiveLimits
 from personal_context_mcp.importers.adapters import (
     ChatGPTImporter,
     ClaudeImporter,
@@ -86,6 +87,29 @@ def test_chatgpt_detects_and_parses(tmp_path: Path) -> None:
     assert conversation.provider_conversation_id == "conv-abc"
     assert conversation.title == "Shared memory architecture"
     assert conversation.created_at is not None
+
+
+def test_chatgpt_reads_a_sharded_export_and_ignores_chat_html(tmp_path: Path) -> None:
+    """Big accounts export conversations-000.json, -001.json, ... plus a huge chat.html."""
+    second = [{**CHATGPT_EXPORT[0], "conversation_id": "conv-def", "title": "Second shard"}]
+    attachment_id = "file-00000000abc"
+    first = json.loads(json.dumps(CHATGPT_EXPORT))
+    first[0]["mapping"]["n1"]["message"]["metadata"] = {
+        "attachments": [{"id": attachment_id, "name": "photo.png"}]
+    }
+    archive = tmp_path / "sharded.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("conversations-000.json", json.dumps(first))
+        zf.writestr("conversations-001.json", json.dumps(second))
+        zf.writestr(f"{attachment_id}.dat", b"\x89PNG fake image")
+        zf.writestr("chat.html", b"x" * 4096)
+    limits = ArchiveLimits(max_entry_bytes=1024)  # chat.html is over this and must not matter
+    importer = ChatGPTImporter(limits=limits)
+
+    assert importer.detect(archive)
+    conversations = list(importer.parse(archive))
+    assert [c.provider_conversation_id for c in conversations] == ["conv-abc", "conv-def"]
+    assert [a.filename for a in conversations[0].attachments if a.data] == [f"{attachment_id}.dat"]
 
 
 def test_chatgpt_follows_the_surviving_branch_only(tmp_path: Path) -> None:
