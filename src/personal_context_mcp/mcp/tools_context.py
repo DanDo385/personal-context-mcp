@@ -16,6 +16,7 @@ from pydantic import Field
 
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.mcp.compact import dump
+from personal_context_mcp.mcp.result import ToolResult, object_output_schema, text_and_structured
 from personal_context_mcp.services import get_services
 
 
@@ -25,6 +26,7 @@ def register(mcp: FastMCP) -> None:
         tags={"context", "read"},
         auth=require_scopes(scopes.CONTEXT_READ),
         annotations={"readOnlyHint": True, "openWorldHint": False},
+        output_schema=object_output_schema(),
     )
     async def context_bootstrap(
         user_message: Annotated[
@@ -37,18 +39,26 @@ def register(mcp: FastMCP) -> None:
         project: Annotated[
             str | None, Field(description="Narrow to one project slug or name, if known.")
         ] = None,
-    ) -> dict[str, Any]:
+    ) -> ToolResult:
         """Smallest useful package of shared context. Skip for trivial questions.
 
         Call first when the request depends on earlier conversations, projects,
         decisions, preferences, lists or artifacts. Raw transcripts are included
         only when nothing else answered. Raise token_budget only if truncated.
+        The text result is one line of counts. The package is the structured result.
         """
         services = get_services()
         package = await services.retrieval.bootstrap(
             user_message, token_budget=token_budget, project=project
         )
-        return dump(package)
+        payload = dump(package)
+        items = payload.get("items") or []
+        count = len(items)
+        noun = "item" if count == 1 else "items"
+        line = f"{count} {noun}, {payload['estimated_tokens']} of {payload['token_budget']} tokens"
+        if payload.get("truncated"):
+            line = f"{line}, truncated"
+        return text_and_structured(line, payload)
 
     @mcp.tool(
         name="context_search",

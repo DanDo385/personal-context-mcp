@@ -238,7 +238,9 @@ context_recent(limit, provider, project)
 `context_bootstrap` is the one that matters. It always includes current project
 state and the most important durable memories, whether or not they matched the
 query — "what am I working on" is context the answer usually needs even when
-those words do not appear in the question.
+those words do not appear in the question. Its text result is one line: how
+many items, and how many tokens they used against the budget. The package is
+the structured result.
 
 Every returned item carries provenance:
 
@@ -308,6 +310,9 @@ list_add_item() list_update_item() list_complete_item()
 list_move_item() list_archive_item()
 list_recent()   list_find_item()
 ```
+
+`list_get` answers with one line of text: the list name, how many items are
+shown, and how many are open. The items are the structured result.
 
 Postgres is canonical. Obsidian renders a view, with each item carrying its
 UUID so a checkbox ticked by hand flows back:

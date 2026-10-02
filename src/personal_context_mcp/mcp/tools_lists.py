@@ -13,6 +13,7 @@ from pydantic import Field
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.auth.principal import current_principal
 from personal_context_mcp.mcp.compact import list_item, list_summary
+from personal_context_mcp.mcp.result import ToolResult, object_output_schema, text_and_structured
 from personal_context_mcp.models import ListItemRecord
 from personal_context_mcp.services import get_services
 
@@ -41,6 +42,7 @@ def register(mcp: FastMCP) -> None:
         tags={"lists", "read"},
         auth=require_scopes(scopes.LISTS_READ),
         annotations={"readOnlyHint": True},
+        output_schema=object_output_schema(),
     )
     async def list_get(
         list: Annotated[str, Field(description="List slug or name.")],
@@ -53,22 +55,31 @@ def register(mcp: FastMCP) -> None:
             Detail,
             Field(description="compact drops nulls and timestamps. full returns every field."),
         ] = "compact",
-    ) -> dict:
+    ) -> ToolResult:
         """One list and its items. Item ids are stable; use them to complete or move.
 
         Compact by default. Raise limit only if shown is less than open.
+        The text result is one line of counts. Items are in the structured result.
         """
         services = get_services()
         record = await services.lists.get(list)
         items = await services.lists.items(list, status=status, limit=limit)
-        return {
+        shown = len(items)
+        open_count = record.open_items
+        truncated = open_count > shown if status in (None, "open") else False
+        payload = {
             "list": record.slug,
             "name": record.name,
-            "open": record.open_items,
-            "shown": len(items),
-            "truncated": record.open_items > len(items) if status in (None, "open") else False,
+            "open": open_count,
+            "shown": shown,
+            "truncated": truncated,
             "items": [list_item(item, detail=detail) for item in items],
         }
+        if truncated:
+            line = f"{record.name}: {shown} of {open_count} open"
+        else:
+            line = f"{record.name}: {shown} shown, {open_count} open"
+        return text_and_structured(line, payload)
 
     @mcp.tool(
         name="list_create",
