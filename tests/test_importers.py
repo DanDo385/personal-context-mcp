@@ -112,6 +112,21 @@ def test_chatgpt_reads_a_sharded_export_and_ignores_chat_html(tmp_path: Path) ->
     assert [a.filename for a in conversations[0].attachments if a.data] == [f"{attachment_id}.dat"]
 
 
+def test_nul_bytes_are_dropped_from_imported_text(tmp_path: Path) -> None:
+    """Postgres rejects \\x00, which used to fail the whole conversation."""
+    export = json.loads(json.dumps(CHATGPT_EXPORT))
+    export[0]["title"] = "Bad\x00 title"
+    for node in export[0]["mapping"].values():
+        message = node.get("message")
+        if message and message["content"].get("parts"):
+            message["content"]["parts"] = ["before\x00after"]
+    archive = _zip(tmp_path / "nul.zip", {"conversations.json": export})
+    conversation = next(iter(ChatGPTImporter().parse(archive)))
+    assert conversation.title == "Bad title"
+    assert all("\x00" not in m.content for m in conversation.messages)
+    assert any(m.content == "beforeafter" for m in conversation.messages)
+
+
 def test_chatgpt_follows_the_surviving_branch_only(tmp_path: Path) -> None:
     """A regenerated answer leaves an abandoned branch that must not be imported."""
     archive = _zip(tmp_path / "cg.zip", {"conversations.json": CHATGPT_EXPORT})
