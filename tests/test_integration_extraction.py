@@ -209,6 +209,22 @@ async def test_same_subject_notes_merge_and_projects_are_created(services, tmp_p
     assert await services.db.fetchval("SELECT count(*) FROM projects") == 1
 
 
+async def test_concurrent_writers_of_one_title_make_one_note(services) -> None:
+    """Parallel extractions that land on the same title must not race to insert."""
+    import asyncio
+
+    results = await asyncio.gather(
+        *(
+            services.notes.upsert(title="Memory architecture", content=f"Part {i}.", append=True)
+            for i in range(8)
+        )
+    )
+    assert len({note_id for note_id, _, _ in results}) == 1
+    assert sum(created for _, created, _ in results) == 1
+    content = await services.db.fetchval("SELECT content FROM notes")
+    assert all(f"Part {i}." in content for i in range(8))
+
+
 async def test_list_changes_are_queued_for_the_vault(services) -> None:
     list_id, _ = await services.lists.create(name="Groceries", list_type="shopping")
     item_id, _ = await services.lists.add_item(list_id=list_id, text="Oat milk")
