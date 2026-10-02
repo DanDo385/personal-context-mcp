@@ -7,6 +7,7 @@ personal-context-mcp probe <url> [--token TOKEN]
 personal-context-mcp import <provider|auto> <archive.zip>
 personal-context-mcp reclassify [--limit N]
 personal-context-mcp review
+personal-context-mcp vault-fill
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.probe import DEFAULT_PROTOCOL_VERSION, run_probe
 from personal_context_mcp.services import build_services, set_services
 from personal_context_mcp.setup_wizard import Answers, build_env, next_steps
+from personal_context_mcp.vault_fill import fill_vault
 from personal_context_mcp.vault_plan import VaultCandidate, vault_candidates
 from personal_context_mcp.wiki.service import WikiService
 
@@ -580,6 +582,27 @@ def extract(
             set_services(None)
 
     asyncio.run(run())
+
+
+@main.command(name="vault-fill")
+def vault_fill_command() -> None:
+    """Write session indexes and maps from rows already stored.
+
+    Does not extract conversations, call a model, or ask Jev. Links a note
+    that names another note's exact title, then queues a wiki render.
+    """
+    settings = get_settings()
+    _configure_cli_logging(settings)
+
+    async def run() -> dict[str, Any]:
+        services = await _with_services(settings)
+        try:
+            return await fill_vault(services)
+        finally:
+            await services.aclose()
+            set_services(None)
+
+    click.echo(json.dumps(asyncio.run(run()), indent=2, default=str))
 
 
 @main.group()

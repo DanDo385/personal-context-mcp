@@ -68,10 +68,18 @@ class ListService:
         self._sync_queue = sync_queue
         self._vault_paths = vault_paths
 
-    async def queue_render(self, list_id: UUID) -> None:
+    async def queue_render(self, list_id: UUID, conn: asyncpg.Connection | None = None) -> None:
+        """Queue a vault write for this list.
+
+        Pass the same connection ``create`` or ``add_item`` is using when that
+        work is still inside an open transaction. A pool read cannot see the
+        uncommitted list, so the vault path would stay null and no job would
+        be queued.
+        """
         if self._sync_queue is None or self._vault_paths is None:
             return
-        row = await self._db.fetchrow(
+        executor = conn or self._db
+        row = await executor.fetchrow(
             """
             SELECT l.slug, l.vault_path, p.slug AS project_slug
             FROM lists l LEFT JOIN projects p ON p.id = l.project_id
@@ -85,19 +93,30 @@ class ListService:
             row["slug"], project_slug=row["project_slug"]
         )
         if not row["vault_path"]:
-            await self._db.execute("UPDATE lists SET vault_path = $2 WHERE id = $1", list_id, path)
+            await executor.execute("UPDATE lists SET vault_path = $2 WHERE id = $1", list_id, path)
         await self._sync_queue.enqueue(
             job_type="write_list",
             object_type="list",
             object_id=list_id,
             vault_path=path,
             payload={"list_id": str(list_id)},
+            conn=conn,
         )
 
-    async def _queue_for_item(self, item_id: UUID) -> None:
-        list_id = await self._db.fetchval("SELECT list_id FROM list_items WHERE id = $1", item_id)
+    async def _queue_for_item(self, item_id: UUID, conn: asyncpg.Connection | None = None) -> None:
+        executor = conn or self._db
+        list_id = await executor.fetchval("SELECT list_id FROM list_items WHERE id = $1", item_id)
         if list_id is not None:
-            await self.queue_render(list_id)
+            await self.queue_render(list_id, conn=conn)
+
+    async def queue_unrendered(self) -> int:
+        """Queue a render for every active list that has no vault path yet."""
+        rows = await self._db.fetch(
+            "SELECT id FROM lists WHERE status = 'active' AND vault_path IS NULL"
+        )
+        for row in rows:
+            await self.queue_render(row["id"])
+        return len(rows)
 
     # ---------------------------------------------------------------- lists
 
@@ -166,7 +185,7 @@ class ListService:
         )
         if row is None:  # pragma: no cover - the upsert always returns a row
             raise RuntimeError("list upsert returned no row")
-        await self.queue_render(row["id"])
+        await self.queue_render(row["id"], conn=conn)
         return row["id"], bool(row["created"])
 
     async def get_or_create(
@@ -301,6 +320,7 @@ class ListService:
         if row is None:  # pragma: no cover - the upsert always returns a row
             raise RuntimeError("list item upsert returned no row")
         await executor.execute("UPDATE lists SET updated_at = now() WHERE id = $1", list_id)
+        await self.queue_render(list_id, conn=conn)
         return row["id"], bool(row["created"])
 
     async def resolve_item(self, list_id: UUID, reference: str) -> UUID | None:
@@ -366,7 +386,7 @@ class ListService:
             due_date,
             notes,
         )
-        await self._queue_for_item(item_id)
+        await self._queue_for_item(item_id, conn=conn)
         return dict(before)
 
     async def complete_item(
@@ -403,7 +423,7 @@ class ListService:
         if moved is None:
             await executor.execute("DELETE FROM list_items WHERE id = $1", item_id)
         for affected in {source_list_id, target_list_id} - {None}:
-            await self.queue_render(affected)
+            await self.queue_render(affected, conn=conn)
 
     async def recent_items(self, *, limit: int = 20) -> list[ListItemRecord]:
         rows = await self._db.fetch(

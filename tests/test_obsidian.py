@@ -9,7 +9,7 @@ import pytest
 
 from obsidian_sync.vault import Vault, note_id_of, parse_list_items
 from personal_context_mcp.errors import PathSecurityError
-from personal_context_mcp.obsidian.render import item_marker, render_list, render_note
+from personal_context_mcp.obsidian.render import item_marker, render_list, render_moc, render_note
 from personal_context_mcp.util import sha256_bytes
 
 ROOTS = {"inbox": "00-Inbox", "project": "20-Projects", "resource": "60-Resources"}
@@ -115,6 +115,85 @@ def test_an_item_without_a_marker_is_reported_not_guessed() -> None:
     parsed = parse_list_items("- [x] A line someone typed by hand")
     assert parsed[0]["id"] is None
     assert parsed[0]["text"] == "A line someone typed by hand"
+
+
+def test_rendered_list_omits_dropped_items_and_tags_its_type() -> None:
+    markdown = render_list(
+        {
+            "id": uuid.uuid4(),
+            "name": "Todo",
+            "list_type": "task",
+            "description": None,
+            "project_slug": None,
+            "updated_at": None,
+        },
+        [
+            {
+                "id": uuid.uuid4(),
+                "text": "Still open",
+                "status": "open",
+                "priority": 0,
+                "due_date": None,
+                "notes": None,
+            },
+            {
+                "id": uuid.uuid4(),
+                "text": "Thrown away",
+                "status": "dropped",
+                "priority": 0,
+                "due_date": None,
+                "notes": None,
+            },
+        ],
+    )
+    assert "type/list" in markdown
+    assert "Still open" in markdown
+    assert "Thrown away" not in markdown
+
+
+def test_note_and_map_frontmatter_carry_type_tags() -> None:
+    project = render_note(
+        {
+            "id": uuid.uuid4(),
+            "title": "A project",
+            "content": "Body.",
+            "note_class": "project",
+            "metadata": {"tags": ["already/set"]},
+            "source_provider": "claude",
+        }
+    )
+    index = render_note(
+        {
+            "id": uuid.uuid4(),
+            "title": "ChatGPT",
+            "content": "Each row is one conversation.",
+            "note_class": "session_index",
+        }
+    )
+    research = render_note(
+        {
+            "id": uuid.uuid4(),
+            "title": "A finding",
+            "content": "Body.",
+            "note_class": "research",
+        }
+    )
+    moc = render_moc(
+        {"id": uuid.uuid4(), "title": "Home", "description": "Start here."},
+        {"reference": [("chatgpt", "ChatGPT")]},
+        section_titles={"reference": "Reference"},
+        lists=[("todo", "Todo")],
+        children=[("revamp", "Revamp")],
+    )
+    assert "type/project" in project
+    assert "already/set" in project
+    assert "from/claude" in project
+    assert "type/session-index" in index
+    assert "type/project" not in research
+    assert "type/moc" in moc
+    assert "## Lists" in moc
+    assert "[[todo|Todo]]" in moc
+    assert "[[chatgpt|ChatGPT]]" in moc
 
 
 def test_note_frontmatter_carries_identity_and_provenance() -> None:

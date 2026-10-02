@@ -123,6 +123,7 @@ async def _render_job(services: Services, job: dict[str, Any]) -> dict[str, Any]
                 section_titles=SECTION_TITLES,
                 children=data["children"],
                 parent=data["parent"],
+                lists=data["lists"],
             )
             payload["content_type"] = "text/markdown"
 

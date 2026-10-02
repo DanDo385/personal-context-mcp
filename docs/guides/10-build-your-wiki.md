@@ -13,6 +13,34 @@ everything else, TypeSafe's Jev is asked "would this link actually help?". Only 
 applied; borderline ones wait for your review; clear "no"s are remembered so they're never paid for
 twice. Without a TypeSafe key, only the exact-title links are made.
 
+## Session indexes and the Home map
+
+Imported conversations stay in the database. The vault gets four index notes, one per assistant,
+plus maps that point at notes you already have:
+
+```bash
+uv run personal-context-mcp vault-fill
+```
+
+That command reads summaries already stored. It does not extract history and it does not ask Jev.
+It writes:
+
+- `70-Atlas/ChatGPT`, `Claude`, `Grok`, and `Gemini`. Each lists the newest 200 sessions (title,
+  date, and the first line of the stored summary). A row links to a note only when that session
+  already has one. The rest of the history is a single "N older" line. Each Gemini row is one
+  takeout day.
+- A Home map in `70-Atlas` linking those indexes, your lists, and your notes.
+- One area map per project that already has a note. Those notes are placed on Home and on their
+  project map directly.
+
+It also links a note that names another note's exact title, then queues the vault writes (the same
+work as `wiki render`). The Obsidian helper from [guide 8](08-obsidian.md) writes the files. Use
+`wiki links` and `wiki mocs` later when you want Jev to judge further links and placements.
+
+Frontmatter tags `type/project`, `type/list`, `type/moc`, and `type/session-index` are added as
+those files are rendered, so the graph can be filtered. Tags you already set on a note stay.
+There is no separate tags column.
+
 ## Step 1: Create some maps
 
 Let it suggest maps from topics that came up in at least three imported conversations (this needs the

@@ -26,7 +26,16 @@ ProviderId = Literal["chatgpt", "claude", "gemini", "grok", "system"]
 StorageStatus = Literal["captured", "referenced", "pending_import", "failed"]
 
 MemoryKind = Literal["fact", "preference", "relationship", "decision", "knowledge"]
-NoteClass = Literal["project", "research", "wiki", "concept", "resource", "daily", "inbox"]
+NoteClass = Literal[
+    "project",
+    "research",
+    "wiki",
+    "concept",
+    "resource",
+    "daily",
+    "inbox",
+    "session_index",
+]
 ListType = Literal["task", "reading", "shopping", "idea", "people", "general"]
 ItemStatus = Literal["open", "done", "dropped", "blocked"]
 ArtifactType = Literal[

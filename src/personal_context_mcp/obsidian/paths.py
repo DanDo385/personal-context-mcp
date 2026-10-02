@@ -142,6 +142,8 @@ class VaultPaths:
         return self._roots.get(key, self._roots.get("inbox", "00-Inbox"))
 
     def note(self, *, note_class: str, title: str, project_slug: str | None = None) -> str:
+        if note_class == "session_index":
+            return self.session_index(title)
         filename = f"{safe_filename(slugify(title) or 'note')}.md"
         if note_class == "project" and project_slug:
             path = f"{self._root('project')}/{slugify(project_slug)}/{filename}"
@@ -154,6 +156,11 @@ class VaultPaths:
     def moc(self, title: str) -> str:
         """Maps of Content live together under the atlas root."""
         filename = f"{safe_filename(slugify(title) or 'map')}.md"
+        return validate_vault_path(f"{self._root('atlas')}/{filename}", self._roots)
+
+    def session_index(self, title: str) -> str:
+        """One provider index, kept with the maps under the atlas root."""
+        filename = f"{safe_filename(slugify(title) or 'index')}.md"
         return validate_vault_path(f"{self._root('atlas')}/{filename}", self._roots)
 
     def project_readme(self, project_slug: str) -> str:

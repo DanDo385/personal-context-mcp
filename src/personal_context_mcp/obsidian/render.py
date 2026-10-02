@@ -46,7 +46,7 @@ def render_list(list_row: dict[str, Any], items: list[dict[str, Any]]) -> str:
             "list_type": list_row.get("list_type"),
             "project": list_row.get("project_slug"),
             "updated": list_row.get("updated_at"),
-            "tags": ["personal-context-mcp/list"],
+            "tags": ["personal-context-mcp/list", "type/list"],
         }
     )
     body = [front, "", f"# {list_row['name']}", ""]
@@ -116,6 +116,11 @@ def render_note(
     tags = ["personal-context-mcp/note", *[t for t in meta.get("tags") or [] if isinstance(t, str)]]
     if note.get("source_provider"):
         tags.append(f"from/{note['source_provider']}")
+    type_tag = {"project": "type/project", "session_index": "type/session-index"}.get(
+        note.get("note_class") or ""
+    )
+    if type_tag and type_tag not in tags:
+        tags.append(type_tag)
     front = _frontmatter(
         {
             "pc_type": "note",
@@ -191,6 +196,7 @@ def render_moc(
     section_titles: dict[str, str],
     children: list[tuple[str, str]] | None = None,
     parent: tuple[str, str] | None = None,
+    lists: list[tuple[str, str]] | None = None,
 ) -> str:
     """A Map of Content: sections in the order of ``section_titles``, entries
     sorted by title. Entirely generated - a MOC has no human-owned body."""
@@ -200,7 +206,7 @@ def render_moc(
             "pc_id": moc["id"],
             "title": moc["title"],
             "updated": moc.get("updated_at"),
-            "tags": ["personal-context-mcp/moc"],
+            "tags": ["personal-context-mcp/moc", "type/moc"],
         }
     )
     parts = [front, "", f"# {moc['title']}", ""]
@@ -216,6 +222,13 @@ def render_moc(
         parts += [
             f"- {wikilink(stem, title)}"
             for stem, title in sorted(entries, key=lambda e: e[1].lower())
+        ]
+        parts.append("")
+    if lists:
+        parts += ["## Lists", ""]
+        parts += [
+            f"- {wikilink(stem, title)}"
+            for stem, title in sorted(lists, key=lambda entry: entry[1].lower())
         ]
         parts.append("")
     if children:

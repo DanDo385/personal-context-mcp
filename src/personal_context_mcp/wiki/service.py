@@ -330,6 +330,36 @@ class WikiService:
             await asyncio.gather(*(judge(note, target) for target in targets))
         return report
 
+    async def link_exact_titles(self) -> WikiReport:
+        """Link a note that names another note's exact title.
+
+        This is the deterministic half of :meth:`build_links`. It does not
+        ask Jev and does not record a review.
+        """
+        report = WikiReport()
+        pattern, by_title = await self._title_index()
+        if pattern is None:
+            return report
+        notes = await self._db.fetch("SELECT id, content FROM notes WHERE vault_path IS NOT NULL")
+        for row in notes:
+            report.notes_scanned += 1
+            outgoing, _decided = await self._decided(row["id"])
+            matches = {match.group(0).lower() for match in pattern.finditer(row["content"] or "")}
+            for match in matches:
+                target_id = by_title.get(match)
+                if target_id and target_id != row["id"] and target_id not in outgoing:
+                    await self._insert_edge(
+                        row["id"],
+                        target_id,
+                        relation="related_concept",
+                        confidence=1.0,
+                        status="accepted",
+                        source="title_mention",
+                    )
+                    outgoing.add(target_id)
+                    report.title_links += 1
+        return report
+
     # ------------------------------------------------------------- MOCs
 
     async def add_moc(
@@ -355,6 +385,32 @@ class WikiService:
             description,
             parent_id,
         )
+
+    async def place_note(self, *, moc_id: UUID, note_id: UUID, section: str) -> bool:
+        """Put a note on a map directly.
+
+        Membership written here is not a Jev decision. A row that already
+        came from classification is left alone.
+        """
+        if section not in SECTION_TITLES:
+            section = "other"
+        placed = await self._db.fetchval(
+            """
+            INSERT INTO moc_memberships (moc_id, note_id, section, confidence, status)
+            VALUES ($1, $2, $3, 1, 'accepted')
+            ON CONFLICT (moc_id, note_id) DO UPDATE
+                SET section = EXCLUDED.section,
+                    confidence = EXCLUDED.confidence,
+                    status = 'accepted',
+                    updated_at = now()
+                WHERE moc_memberships.classification_event_id IS NULL
+            RETURNING note_id
+            """,
+            moc_id,
+            note_id,
+            section,
+        )
+        return placed is not None
 
     async def seed_mocs(self, *, min_mentions: int = 3) -> list[str]:
         """Propose a map for every topic that deep extraction named in at
@@ -668,9 +724,20 @@ async def moc_render_input(services: Services, moc_id: UUID) -> dict[str, Any] |
         "SELECT vault_path, title FROM mocs WHERE id = $1 AND vault_path IS NOT NULL",
         moc["parent_moc_id"],
     )
+    # Lists are not notes, so they cannot be moc_memberships. Home links them here.
+    list_links: list[tuple[str, str]] = []
+    if moc["slug"] == "home":
+        list_rows = await services.db.fetch(
+            """
+            SELECT name, vault_path FROM lists
+            WHERE status = 'active' AND vault_path IS NOT NULL
+            """
+        )
+        list_links = [(stem(row["vault_path"]), row["name"]) for row in list_rows]
     return {
         "moc": dict(moc),
         "sections": sections,
         "children": [(stem(c["vault_path"]), c["title"]) for c in children],
         "parent": (stem(parent["vault_path"]), parent["title"]) if parent else None,
+        "lists": list_links,
     }

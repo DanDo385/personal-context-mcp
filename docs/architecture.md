@@ -321,6 +321,11 @@ Identity comes **only** from that marker. An edited line without one is
 reported as unmatched, never matched by text — ticking the wrong item because
 two lines read similarly would be worse than doing nothing.
 
+A list created inside a session checkpoint is queued on that same database
+connection, and its vault path is written there too. The worker renders the
+file after the checkpoint commits, including open, blocked, and done items.
+Dropped items are left out.
+
 ---
 
 ## Artifacts
@@ -512,6 +517,14 @@ anywhere along the path, unknown roots, and unknown file extensions.
 
 `sync_status` reports the queue and the worker's last activity, so a model can
 answer "did that reach my vault" honestly rather than assuming.
+
+Session indexes live under `70-Atlas`, one note per provider, built from
+summaries already stored. Maps of Content render in the same folder. The Home
+map also links active lists, which are not notes and so are not membership
+rows. Frontmatter includes `type/project`, `type/list`, `type/moc`, or
+`type/session-index` so the graph can be filtered. `vault-fill` writes the
+indexes and those maps from stored rows, then queues a render. It does not
+call a model. Exact-title links are the only links it creates.
 
 ---
 

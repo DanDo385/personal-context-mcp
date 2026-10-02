@@ -99,7 +99,19 @@ replace `%h` in the service file with your full home directory path.)
 | `40-Wiki` | Explanations of how things work |
 | `50-Concepts` | Single ideas and terms |
 | `60-Resources` | Tools, articles, your lists, saved files not tied to a project |
-| `70-Atlas` | Map pages linking everything on a topic ([guide 10](10-build-your-wiki.md)) |
+| `70-Atlas` | One session index per assistant, plus map pages that link a topic ([guide 10](10-build-your-wiki.md)) |
+
+The four index notes are `ChatGPT`, `Claude`, `Grok`, and `Gemini`. Each lists the newest
+200 sessions: title, date, and the first line of the summary already stored. A row is a link
+only when that session already has its own note. Older sessions are one line, "N older".
+Gemini rows are takeout days (one row per day in the export). `vault-fill` writes these
+from the database. It does not call a model. See [guide 10](10-build-your-wiki.md).
+
+Lists render open, blocked, and done items. Dropped items stay out of the file.
+
+Rendered files carry a `type/` tag in frontmatter so the graph can be filtered:
+`type/project` on project notes, `type/list` on lists, `type/moc` on maps, and
+`type/session-index` on the four indexes. Tags already stored on a note are kept.
 
 ## Editing notes
 
