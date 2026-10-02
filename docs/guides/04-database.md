@@ -35,7 +35,7 @@ which gives you a proper PostgreSQL database plus file storage, free to start, i
 > string. The easiest fix is to reset the database password (**Project Settings → Database**) to one
 > made of only letters and numbers.
 >
-> **Safe characters for your database password:** letters (`a-z`, `A-Z`), numbers (`0-9`), hyphens (`-`), and underscores (`_`). Avoid `@ : / # ? % & +` and spaces — they break the connection string.
+> **Safe characters for your database password:** letters (`a-z`, `A-Z`), numbers (`0-9`), hyphens (`-`), and underscores (`_`). Avoid `@ : / # ? % & +` and spaces: they break the connection string.
 
 ## Step 3: Copy the project URL and service key
 

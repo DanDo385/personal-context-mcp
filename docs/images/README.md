@@ -37,4 +37,4 @@ In each guide, images are referenced as:
 ```
 
 Replace with actual screenshots when available. Guides currently describe the UI in text and remain
-fully functional without images — screenshots are a supplement, not a requirement.
+fully functional without images; screenshots are a supplement, not a requirement.

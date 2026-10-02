@@ -60,7 +60,7 @@ else.
 
 | | Why | Cost |
 | --- | --- | --- |
-| A computer (Mac, Linux or Windows with WSL) | To set things up. After that it can be off. | — |
+| A computer (Mac, Linux or Windows with WSL) | To set things up. After that it can be off. | n/a |
 | A Google account | The apps sign in to your server through Google. | Free |
 | A [Supabase](https://supabase.com) account | Your database. | Free plan is enough to start |
 | A [Vercel](https://vercel.com) account | Puts your server on the internet. | Free (personal use) |

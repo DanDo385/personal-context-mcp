@@ -10,7 +10,7 @@ Grok opens a browser window for OAuth. Sign in with the Google account on your
 allowlist and approve the consent screen. Grok then discovers the tools the
 server exposes.
 
-**Grok handles the sign-in automatically through your server.** You don't need to enter any client ID or secret — just paste the URL and sign in with Google.
+**Grok handles the sign-in automatically through your server.** You don't need to enter any client ID or secret. Just paste the URL and sign in with Google.
 
 Connectors and the custom MCP option are on Grok's paid tiers.
 
@@ -43,7 +43,7 @@ model-generated analysis and external research.
 
 ## 3. Skills
 
-Grok doesn't support skills files. The instruction you pasted in step 2 is enough — it tells Grok when to use its new tools.
+Grok doesn't support skills files. The instruction you pasted in step 2 is enough: it tells Grok when to use its new tools.
 
 ## Turn off built-in memory (recommended)
 

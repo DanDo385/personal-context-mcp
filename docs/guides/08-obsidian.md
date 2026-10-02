@@ -18,7 +18,7 @@ it once, so everything else can use `~/Obsidian`:
 ln -s ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents ~/Obsidian
 ```
 
-> **Tip: use Tab to fill the path.** Type `ln -s ~/Library/Mobile` then press **Tab** — your terminal
+> **Tip: use Tab to fill the path.** Type `ln -s ~/Library/Mobile` then press **Tab**, and your terminal
 > fills in the rest. If it doesn't, you haven't installed Obsidian on this Mac yet, or iCloud Drive
 > isn't set up.
 
@@ -84,7 +84,7 @@ The timer runs the helper every 5 minutes. To stop: `systemctl --user disable --
 Logs: `journalctl --user -u obsidian-sync -f`.
 
 (Tip: if `systemctl --user` says "Failed to connect to bus", your Linux setup doesn't have a user
-session manager. Use `systemctl` with `sudo` instead — copy the files to `/etc/systemd/system/` and
+session manager. Use `systemctl` with `sudo` instead: copy the files to `/etc/systemd/system/` and
 replace `%h` in the service file with your full home directory path.)
 
 **Windows (WSL):** run `uv run obsidian-sync run` in a terminal you leave open.

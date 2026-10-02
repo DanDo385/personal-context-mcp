@@ -20,13 +20,13 @@ After the first few saves, you don't need to manage anything. The apps:
   working on, a decision you made, a list you keep.
 - **Save decisions and facts** at the end of a useful conversation. They bundle everything worth
   keeping into one save, without duplicates.
-- **Update your lists.** If you say "add oat milk to my shopping list," the real list is updated —
+- **Update your lists.** If you say "add oat milk to my shopping list," the real list is updated;
   the app doesn't just write out a copy from memory.
-- **Preserve files they create.** Charts, documents, code — if an app makes something useful, you can
+- **Preserve files they create.** Charts, documents, code: if an app makes something useful, you can
   ask it to save the file itself, not just mention that it existed.
 
 The apps won't save or look up things for trivial questions ("what's 2+2?"). They also won't save
-every message — only the durable stuff: decisions, facts, tasks, unresolved questions.
+every message, only the durable stuff: decisions, facts, tasks, unresolved questions.
 
 ## How to talk to them
 
@@ -35,7 +35,7 @@ You don't need special commands. But these phrases help when you want to be expl
 | You say | The app does |
 | --- | --- |
 | "Check my personal context." | Searches everything saved across all apps for relevant information. |
-| "Save this to personal context." | Saves the current state of the conversation — decisions, facts, tasks. |
+| "Save this to personal context." | Saves the current state of the conversation: decisions, facts, tasks. |
 | "Add [something] to my [list name] list." | Updates your real list. |
 | "What did we decide about [topic]?" | Searches past decisions, even from a different app. |
 | "Save this file to my [project] project." | Stores the actual file bytes, not just a reference. |
@@ -48,9 +48,9 @@ Each app handles tool permissions differently:
 
 | App | First write | Later writes | Can you allow always? |
 | --- | --- | --- | --- |
-| **Claude** | Asks once per tool | Follows your choice | Yes — choose "always allow" |
-| **ChatGPT** | Confirms each write | Confirms each write | Yes — there's an "always allow" option |
-| **Gemini** | Asks every time | Asks every time | No — Gemini requires a tap for each write |
+| **Claude** | Asks once per tool | Follows your choice | Yes, choose "always allow" |
+| **ChatGPT** | Confirms each write | Confirms each write | Yes, there's an "always allow" option |
+| **Gemini** | Asks every time | Asks every time | No, Gemini requires a tap for each write |
 | **Grok** | Confirms each write | Confirms each write | Check Grok's settings |
 
 Gemini's constant confirmation is a Gemini limitation, not a problem with your server. It's a

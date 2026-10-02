@@ -66,7 +66,7 @@ If your account has account-level Skills, upload the directories under
 `skills/`: at minimum `recall-context`, `checkpoint-session`, `manage-lists`,
 `capture-artifacts`, `project-artifacts` and `research-to-obsidian`.
 To check: go to Settings. If you see a "Skills" section, upload the folders
-listed above. If you don't see it, skip this section — your custom instruction
+listed above. If you don't see it, skip this section: your custom instruction
 covers the same ground.
 
 ## 5. Surfaces and limitations
@@ -81,7 +81,7 @@ covers the same ground.
 
 **Known rough edges.** Occasionally a connector disappears from the list.
 If your tools stop working: remove and re-add the connector (30 seconds).
-Your server is almost certainly fine — check `/healthz` to confirm.
+Your server is almost certainly fine; check `/healthz` to confirm.
 
 **Attachment limitation.** As with every provider, an uploaded file that is
 not delivered to tools as bytes is recorded with
