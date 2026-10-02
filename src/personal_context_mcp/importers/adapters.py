@@ -11,6 +11,7 @@ attachment it names becomes a ``pending_import`` artifact.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ from personal_context_mcp.importers.base import (
     NormalizedConversation,
     NormalizedMessage,
     collect_attachments,
+    iter_json_members,
     load_json_members,
     parse_timestamp,
     provenance_for,
@@ -49,6 +51,13 @@ def _text_from_parts(parts: Any) -> str:
     return ""
 
 
+_SHARD = re.compile(r"conversations(-\d+)?\.json")
+
+
+def _is_conversations_member(basename: str) -> bool:
+    return _SHARD.fullmatch(basename) is not None
+
+
 class ChatGPTImporter:
     """OpenAI's `conversations.json` export.
 
@@ -68,14 +77,14 @@ class ChatGPTImporter:
         # the filename alone is not enough - detection has to look at the
         # shape. ChatGPT's conversations carry a `mapping` of message nodes.
         try:
-            members = load_json_members(path, names=("conversations.json",), limits=self._limits)
+            for _, data in iter_json_members(
+                path, match=_is_conversations_member, limits=self._limits
+            ):
+                first = data[0] if isinstance(data, list) and data else None
+                return isinstance(first, dict) and "mapping" in first
         except Exception:
             return False
-        data = members.get("conversations.json")
-        if not isinstance(data, list) or not data:
-            return False
-        first = data[0]
-        return isinstance(first, dict) and "mapping" in first
+        return False
 
     def limitations(self) -> list[str]:
         return [
@@ -89,14 +98,25 @@ class ChatGPTImporter:
         ]
 
     def parse(self, path: Path) -> Iterator[NormalizedConversation]:
-        members = load_json_members(path, names=("conversations.json",), limits=self._limits)
-        conversations = members.get("conversations.json") or []
-        if not isinstance(conversations, list):
-            logger.warning("conversations.json was not a list; skipping")
-            return
+        # chat.html is a rendering of the same chats and sites/ holds generated
+        # web projects; neither is an attachment, and chat.html alone is 250 MB.
+        attachments = collect_attachments(
+            path, limits=self._limits, skip_paths=("chat.html", "sites/")
+        )
 
-        attachments = collect_attachments(path, limits=self._limits)
+        # Large accounts export `conversations-000.json`, `conversations-001.json`,
+        # ... instead of one file; stream them so only one shard is in memory.
+        for member, conversations in iter_json_members(
+            path, match=_is_conversations_member, limits=self._limits
+        ):
+            if not isinstance(conversations, list):
+                logger.warning("export member was not a list; skipping", extra={"member": member})
+                continue
+            yield from self._parse_conversations(conversations, attachments)
 
+    def _parse_conversations(
+        self, conversations: list[Any], attachments: dict[str, NormalizedAttachment]
+    ) -> Iterator[NormalizedConversation]:
         for raw in conversations:
             if not isinstance(raw, dict):
                 continue

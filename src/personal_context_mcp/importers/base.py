@@ -19,7 +19,7 @@ than inventing a structure for it.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -170,39 +170,54 @@ def provenance_for(role: str) -> str:
     }.get(role.lower(), "imported_metadata")
 
 
-def load_json_members(
-    archive: Path, *, names: tuple[str, ...], limits: ArchiveLimits
-) -> dict[str, Any]:
-    """Read named JSON members out of an export archive, safely."""
-    found: dict[str, Any] = {}
-    wanted = set(names)
+def iter_json_members(
+    archive: Path, *, match: Callable[[str], bool], limits: ArchiveLimits
+) -> Iterator[tuple[str, Any]]:
+    """Yield (basename, parsed JSON) for members whose basename satisfies ``match``.
+
+    One member is held in memory at a time, so a large sharded export is read
+    as a stream.
+    """
 
     def wants(name: str) -> bool:
-        base = name.rsplit("/", 1)[-1]
-        return base in wanted
+        return match(name.rsplit("/", 1)[-1])
 
     for entry in iter_safe_entries(archive, limits=limits, name_filter=wants):
         base = entry.name.rsplit("/", 1)[-1]
         try:
-            found[base] = json.loads(entry.data.decode("utf-8"))
+            yield base, json.loads(entry.data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             logger.warning("unparsable export member", extra={"member": base, "why": str(exc)})
-    return found
+
+
+def load_json_members(
+    archive: Path, *, names: tuple[str, ...], limits: ArchiveLimits
+) -> dict[str, Any]:
+    """Read named JSON members out of an export archive, safely."""
+    wanted = set(names)
+    return dict(iter_json_members(archive, match=wanted.__contains__, limits=limits))
 
 
 def collect_attachments(
-    archive: Path, *, limits: ArchiveLimits, skip_suffixes: tuple[str, ...] = (".json",)
+    archive: Path,
+    *,
+    limits: ArchiveLimits,
+    skip_suffixes: tuple[str, ...] = (".json",),
+    skip_paths: tuple[str, ...] = (),
 ) -> dict[str, NormalizedAttachment]:
     """Index every non-JSON file in an export by its basename.
 
     Providers reference attachments inconsistently - sometimes by id, sometimes
-    by filename - so the index is keyed on both.
+    by filename - so the index is keyed on both. ``skip_paths`` leaves out
+    members (by path prefix) that are not attachments at all.
     """
     index: dict[str, NormalizedAttachment] = {}
     for entry in iter_safe_entries(
         archive,
         limits=limits,
-        name_filter=lambda n: not n.lower().endswith(skip_suffixes),
+        name_filter=lambda n: (
+            not n.lower().endswith(skip_suffixes) and not n.startswith(skip_paths)
+        ),
     ):
         basename = entry.name.rsplit("/", 1)[-1]
         if not basename:
@@ -215,6 +230,8 @@ def collect_attachments(
             metadata={"archive_member": entry.name, "sha256": entry.sha256},
         )
         index[basename] = attachment
+        # ChatGPT names the file "file-abc.dat" but references it as "file-abc".
+        index.setdefault(basename.rsplit(".", 1)[0], attachment)
         # Also index by the leading id segment, e.g. "file-abc123-photo.png".
         stem = basename.split("-", 1)[0]
         if stem and stem not in index:
