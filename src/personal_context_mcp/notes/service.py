@@ -81,8 +81,28 @@ class NoteService:
         ``append=True`` adds to the existing body instead of replacing it,
         which is what research-to-obsidian wants when a topic is revisited.
         """
-        executor = conn or self._db
+        if conn is None:
+            async with self._db.transaction() as tx:
+                return await self.upsert(
+                    title=title,
+                    content=content,
+                    note_class=note_class,
+                    project_id=project_id,
+                    vault_path=vault_path,
+                    sensitivity=sensitivity,
+                    citations=citations,
+                    source_provider=source_provider,
+                    source_conversation_id=source_conversation_id,
+                    provenance=provenance,
+                    author=author,
+                    append=append,
+                    conn=tx,
+                )
+        executor = conn
         slug = slugify(title, fallback="note")
+        # One writer per slug until commit: concurrent extractions that land on
+        # the same title would otherwise both see no row and both insert.
+        await executor.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"notes:{slug}")
         existing = await executor.fetchrow(
             "SELECT id, content, version FROM notes WHERE slug = $1", slug
         )
