@@ -42,6 +42,11 @@ class NormalizedMessage:
     model: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Postgres text cannot hold NUL, and exports occasionally contain one
+        # (binary pasted into a chat). Dropping it keeps the rest of the message.
+        self.content = self.content.replace("\x00", "")
+
 
 @dataclass
 class NormalizedAttachment:
@@ -70,6 +75,10 @@ class NormalizedConversation:
     messages: list[NormalizedMessage] = field(default_factory=list)
     attachments: list[NormalizedAttachment] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.title:
+            self.title = self.title.replace("\x00", "")
 
 
 @dataclass
