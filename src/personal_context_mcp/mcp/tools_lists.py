@@ -160,7 +160,7 @@ def register(mcp: FastMCP) -> None:
     ) -> dict:
         """Change one item. Only supplied fields are altered."""
         services = get_services()
-        await services.lists.update_item(
+        before = await services.lists.update_item(
             item_id,
             text=text,
             status=status,
@@ -173,6 +173,7 @@ def register(mcp: FastMCP) -> None:
             action="update",
             object_type="list_item",
             object_id=item_id,
+            previous_version=before,
         )
         return {"updated": True, "item_id": str(item_id)}
 
@@ -195,12 +196,13 @@ def register(mcp: FastMCP) -> None:
         item_id = await services.lists.resolve_item(list_id, item)
         if item_id is None:
             return {"completed": False, "reason": "No matching item. Call list_get for ids."}
-        await services.lists.complete_item(item_id)
+        before = await services.lists.complete_item(item_id)
         await services.audit.record(
             tool="list_complete_item",
             action="update",
             object_type="list_item",
             object_id=item_id,
+            previous_version=before,
         )
         return {"completed": True, "item_id": str(item_id)}
 
@@ -236,12 +238,13 @@ def register(mcp: FastMCP) -> None:
     ) -> dict:
         """Drop an item without deleting it. The row and its history remain."""
         services = get_services()
-        await services.lists.update_item(item_id, status="dropped")
+        before = await services.lists.update_item(item_id, status="dropped")
         await services.audit.record(
             tool="list_archive_item",
             action="update",
             object_type="list_item",
             object_id=item_id,
+            previous_version=before,
         )
         return {"archived": True, "item_id": str(item_id)}
 
