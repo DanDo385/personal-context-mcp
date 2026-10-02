@@ -51,7 +51,7 @@ async def test_client_can_list_the_full_tool_surface(mcp_client) -> None:
 async def test_tool_descriptions_tell_the_model_when_not_to_call(mcp_client) -> None:
     tools = {t.name: t for t in await mcp_client.list_tools()}
     bootstrap = tools["context_bootstrap"].description or ""
-    assert "trivial self-contained" in bootstrap
+    assert "Skip for trivial questions" in bootstrap
 
 
 async def test_artifact_tools_warn_against_claiming_capture(mcp_client) -> None:
@@ -99,9 +99,10 @@ async def test_checkpoint_then_bootstrap_through_mcp(mcp_client) -> None:
         "context_bootstrap",
         {"user_message": "What did I decide about my shared AI memory architecture?"},
     )
-    joined = " ".join(item.content for item in package.data.items)
+    result = package.structured_content or {}
+    joined = " ".join(item["content"] for item in result["items"])
     assert "Supabase is canonical" in joined
-    assert package.data.estimated_tokens <= package.data.token_budget
+    assert result["estimated_tokens"] <= result["token_budget"]
 
 
 async def test_lists_round_trip_through_mcp(mcp_client) -> None:

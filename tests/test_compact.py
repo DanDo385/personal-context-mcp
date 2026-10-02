@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from personal_context_mcp.mcp.compact import dump, list_item, list_summary
@@ -36,7 +36,7 @@ def test_list_item_compact_keeps_id_and_drops_nulls() -> None:
         position=3,
         due_date=None,
         notes=None,
-        created_at=datetime(2026, 9, 30, tzinfo=timezone.utc),
+        created_at=datetime(2026, 9, 30, tzinfo=UTC),
         completed_at=None,
     )
     projected = list_item(item)
@@ -56,7 +56,7 @@ def test_list_item_keeps_notes_and_due_date() -> None:
         position=1,
         due_date=date(2026, 10, 5),
         notes="From past chats",
-        created_at=datetime(2026, 9, 30, tzinfo=timezone.utc),
+        created_at=datetime(2026, 9, 30, tzinfo=UTC),
         completed_at=None,
     )
     assert list_item(item) == {
