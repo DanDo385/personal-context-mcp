@@ -20,9 +20,25 @@ Custom apps are part of **Gemini Spark**, so you need:
 Setup happens on desktop only. Once connected, the app is available in both
 Gemini web and the Gemini mobile app.
 
+> **Which Google account to sign in with.** Gemini only connects custom apps on a **personal**
+> Google Account, and the server only lets in the email(s) in `PC_ALLOWED_SUBJECTS`. Use the same
+> personal account you used for the other apps ([guide 6](../docs/guides/06-connect-your-ai-apps.md),
+> step 2), *not* a Google Workspace (work/school) account, even if that account also signs in
+> successfully during the flow. A Workspace account can complete Google sign-in and then the link
+> fails with "Account linking is required to use this custom app. Try again."
+
 If the connection dialog asks for credentials under **Advanced features →
 Show more**, that is the fallback path for servers without Dynamic Client
 Registration. This server supports DCR, so you should not need it. If the dialog does show **Advanced features → Show more** with fields for a client ID and secret, check that your server address starts with `https://` (not `http://`) and has no trailing slash. Remove the connector and add it again.
+
+**If you do enter credentials by hand**, they are not the ones Google uses for its own
+sign-in. The manual fields take an MCP client registration for *this server*, and with DCR the
+server creates that itself. Never paste the Google OAuth Client ID/secret from
+[guide 3](../docs/guides/03-google-sign-in.md) into them, and never credentials belonging to
+another app or project (a phone demo, for example): they will be rejected with
+`Client ID ... is not registered with this server`, and the link fails. The fix is to remove the
+custom app in Gemini (Settings & help → Connected Apps → More details → Remove app) and add it
+again with only the URL, letting Gemini use DCR.
 
 ## 2. Instructions
 
