@@ -1,0 +1,151 @@
+# AGENTS.md
+
+Guidance for every coding agent working in this repository (Claude Code, Codex, Pi, OpenCode, Grok
+and others). `CLAUDE.md` is a symlink to this file, so there is one source of truth: edit this file.
+
+## Documentation is part of every change
+
+This is meant to be a popular open-source project used by non-programmers. `README.md` is the
+friendly front door; `docs/guides/00`-`10` are the step-by-step setup path, written for someone who
+has barely used a terminal (what to type, what success looks like, what to do when it fails). Any
+user-facing change updates the relevant guide, `docs/troubleshooting.md` for new error messages, and
+`.env.example` for new settings. Keep personal deployment values (domains, emails, 1Password item
+ids) out of committed docs and templates; they live in Git-ignored `deploy/local.env` and
+`deploy/*.env.op`. `personal-context-mcp init` (`setup_wizard.py`) is the supported way to create a
+`.env`.
+
+## Commands
+
+```bash
+uv sync --all-groups                       # install, including dev group
+uv run personal-context-mcp migrate            # apply migrations (--status to see pending)
+uv run personal-context-mcp check              # validate config, DB, migrations, buckets, Jev
+uv run personal-context-mcp serve              # run the MCP server
+docker compose up -d db                    # Postgres 17 + pgvector on :5432
+
+uv run ruff check src tests
+uv run ruff format src tests
+uv run mypy src                            # packages personal_context_mcp, obsidian_sync
+uv run pytest
+uv run pytest tests/test_paths.py::test_name -x   # single test
+```
+
+`ruff check src tests`, `mypy src` and `pytest` are all expected to be clean before a change is
+done.
+
+### Tests
+
+Two tiers, split by whether a database is needed:
+
+- Unit tests (`test_paths`, `test_archives`, `test_classifier`, `test_auth`, `test_obsidian`,
+  `test_importers`, `test_http_security`) need nothing external.
+- `test_integration_*` modules carry `pytestmark = requires_db` and **skip** unless
+  `PC_TEST_DATABASE_URL` is set. The `db` fixture drops and recreates the `public` schema on every
+  test, and `conftest._test_dsn` aborts the whole run if the database name does not contain
+  `test`.
+
+```bash
+export PC_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_context_mcp_test
+uv run pytest
+```
+
+`CONTRIBUTING.md` documents a Docker-free Postgres (`pgserver`, pgvector included) for machines
+without Homebrew bottles.
+
+### Migrations
+
+Numbered SQL in `migrations/`, applied once inside a transaction and recorded with a content hash.
+**Editing an already-applied migration is refused at runtime** — add a new numbered file instead.
+`VECTOR(1536)` in `0002` fixes `config.EMBEDDING_DIM`; changing the dimension requires a migration.
+
+## Architecture
+
+An MCP server (FastMCP mounted in Starlette) that is shared, provider-neutral memory for ChatGPT,
+Claude, Gemini and Grok. Postgres+pgvector is canonical structured state, object storage holds
+artifact bytes, Obsidian is a rendered human layer. `docs/architecture.md` is the long-form design document;
+the points below are the ones that span files.
+
+**Request path.** `server.py` builds the FastMCP server (auth provider, rate-limit middleware,
+tool registration via `mcp/register_all`) and mounts it in a Starlette app alongside `/worker/*`
+and health routes. Its lifespan opens the asyncpg pool and calls `build_services`.
+
+**Service wiring is explicit.** `services.py` constructs every service in dependency order into one
+`Services` dataclass, stored in a module global and reached from tool functions with
+`get_services()`. There is no DI framework; add new services to that function and dataclass.
+
+**Tools are thin.** `mcp/tools_*.py` only declare the schema (`Annotated[... , Field(description=)]`),
+enforce a scope with `auth=require_scopes(...)`, and delegate to a service in
+`memory/ sessions/ projects/ lists/ notes/ artifacts/ retrieval/ review/`. Business logic and SQL
+belong in the service, never in the tool module. Field descriptions are prompt surface — the model
+reads them — so they are written as instructions to the caller.
+
+**`models.py` is the MCP boundary.** Pydantic types with `extra="forbid"`; the `Literal` unions
+there (`Provenance`, `Sensitivity`, `StorageStatus`, `ArtifactType`, …) are the vocabulary the rest
+of the code and the SQL agree on.
+
+**Classification is two-stage and must stay that way.** Deterministic rules
+(`classifier/rules.py`) answer anything code can answer — MIME, extension, file tree, hashes,
+duplicates. Jev (`classifier/jev.py`, TypeSafe) answers only typed semantic questions and returns
+probabilities; it never returns prose, a path or an action. `classifier/policy.py` maps answers to
+actions through confidence bands scaled by an action-class multiplier. Every question and threshold
+lives in `classifier/questions.py` on purpose — those two files are what a human reviews. When Jev
+is unavailable the result is marked `degraded`, the fallback deliberately refuses to guess a project
+or write to the vault, and the object is queued for reclassification.
+
+**`session_checkpoint` is the shared write path** (`sessions/service.py`, the largest module). One
+transaction, and idempotent through deterministic keys — `(provider, provider_conversation_id)` for
+conversations, content hashes for decisions/memories/list items — never through caller bookkeeping.
+Preserve both properties when changing it.
+
+**The cloud never reaches the Mac.** `obsidian/queue.py` only enqueues jobs (validated path,
+rendered content, `expected_sha256`); `src/obsidian_sync/` polls `/worker/*` outbound with a shared
+key, **re-validates the path itself**, compares hashes and acks `done` or `conflict`. The worker
+does not trust the server — keep the second validation. Vault paths are rejected by both layers
+(`obsidian/paths.py`): traversal, absolute paths, dotfiles, symlinks, unknown roots or extensions.
+
+**Artifacts.** Object keys are generated only by `artifacts/keys.py` from structured inputs; no model
+or classifier ever supplies a path. `storage_status` must stay honest — only `captured` means bytes
+were stored and SHA-256 verified, and `artifact_register_reference` refuses `status="captured"`.
+Manifests are generated in Python from stored rows. Provider ZIPs go through `artifacts/archives.py`
+guards (zip-slip, entry count, per-entry and total size, compression ratio, streamed and checked
+against bytes actually read).
+
+**Privacy routing happens before any external call.** `JevClassifier._ask` and the embedding service
+check sensitivity first; content at a level in `PC_NO_EXTERNAL_SENSITIVITY` never leaves the process,
+never auto-promotes to the vault, and gets a shorter signed-URL TTL. Text that does go out is
+redacted first.
+
+**Auth is two layers.** Identity (OAuth 2.1 + PKCE against Google/GitHub, or `jwt` mode) plus an
+allowlist of subjects; capability scopes (`auth/scopes.py`) granted server-side per client from
+`PC_CLIENT_SCOPE_POLICY`, defaulting to read-only for an unmatched client. `PC_SERVER_ID` is defence
+in depth only — `tests/test_http_security.py` asserts an unauthenticated caller learns nothing with
+or without it. Keep that test honest when adding routes.
+
+**Config is environment-only**, `PC_`-prefixed, in `config.py`, documented in `.env.example`.
+`Settings.validate_startup()` reports *every* unsafe configuration at once and the server refuses to
+boot on one (`auth_mode=none|static` in prod, plain HTTP in prod, OAuth without an allowlist).
+
+**Embeddings are optional.** `PC_EMBEDDING_PROVIDER=none` is the default; retrieval falls back to
+full-text search alone, so nothing may assume a vector is present.
+
+**Historical backfill is two passes.** Import screens sensitivity deterministically
+(`importers/sensitivity.py`, can only raise a level), then Jev classifies an excerpt (pass 1),
+cached by input in `classification_events.metadata.cache_key`. `extraction/deep.py` (pass 2)
+sends only conversations Jev marked `deep_extraction=yes` to Claude and writes the result through
+`session_checkpoint`. `reclassify-conversations` redoes pass 1 from stored messages.
+
+**The wiki graph lives in Postgres** (`note_edges`, `mocs`, `moc_memberships`; `wiki/service.py`).
+Links and maps render into a marked generated block at note-render time (`obsidian/render.py`),
+and `extract_note_body` strips that block, the frontmatter and the title from human edits before
+they are stored. Keep both halves in step.
+
+**Deployment** is Vercel (`vercel.json` framework `python`; `main.py` → `personal_context_mcp.asgi:app`);
+see `docs/guides/05-put-it-online.md` and `deploy/README.md`. The maintainer's own values live in
+Git-ignored `deploy/local.env` and `deploy/*.env.op`, and `.1password/project.toml` routes local runs
+to their 1Password Environment (`project-env`).
+
+### Consumers outside `src/`
+
+- `skills/` — eight portable workflow skills handed to the providers.
+- `instructions/` — per-provider connector setup plus the shared custom instruction.
+- `scripts/` — thin wrappers over `personal-context-mcp import <provider>` / `reclassify`.
