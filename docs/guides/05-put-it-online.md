@@ -143,7 +143,16 @@ vercel deploy --prod
 Vercel is the simplest option, not the only one. The server is an ordinary Python web app, and the
 project includes a `Dockerfile`, so it runs on Google Cloud Run, Fly.io, Railway, a home server, or
 anything else that runs containers. [Architecture: Deployment](../architecture.md#deployment) covers
-Cloud Run. Whatever you choose, it needs a public **https** address.
+Cloud Run. Whatever you choose, it needs a public **https** address that stays the same:
+
+- Let the platform (or a proxy such as Caddy) handle **https** and pass requests to the container on
+  port 8080. The image already trusts that proxy's headers.
+- Set `PC_BASE_URL` to that https address, exactly as the apps will see it.
+- Don't connect the apps through a temporary tunnel (a quick `ngrok` or `cloudflared` link). Its
+  address changes or goes away when your computer sleeps, and the phone apps lose the connection.
+
+Then check it from your computer: `uv run personal-context-mcp probe https://<your-address>/mcp`
+should end with `All 7 checks passed.`
 
 ## Common problems
 
