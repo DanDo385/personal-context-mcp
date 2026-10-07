@@ -252,6 +252,24 @@ async def test_request_log_never_contains_the_credential(client, caplog) -> None
     assert "private words" not in logged
 
 
+async def test_request_log_never_contains_a_scheme_less_credential(client, caplog) -> None:
+    http_client, settings = client
+    caplog.set_level("INFO", logger="personal_context_mcp.server")
+    await http_client.post(
+        settings.mcp_path,
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers={
+            "authorization": "sk-live-SchemeLessSecret",
+            "accept": "application/json, text/event-stream",
+        },
+    )
+    records = [r for r in caplog.records if r.getMessage() == "http request"]
+    assert records
+    record = records[-1].__dict__
+    assert record["credential_scheme"] == "unrecognized"
+    assert "schemelesssecret" not in repr(record).lower()
+
+
 def test_request_log_summarises_the_rpc_envelope_without_values() -> None:
     from personal_context_mcp.server import _rpc_summary
 

@@ -258,6 +258,7 @@ def _session(
     )
 
     response = rpc("notifications/initialized", None, None)
+    show("notifications/initialized", response)
     report.check(
         response.status_code in (200, 202),
         f"notifications/initialized returned HTTP {response.status_code}",
@@ -269,10 +270,10 @@ def _session(
     while True:
         page += 1
         response = rpc("tools/list", {"cursor": cursor} if cursor else {}, 1 + page)
-        body = _decode(response) if response.status_code == 200 else None
+        body = show(f"tools/list page {page}", response)
         result = body.get("result") if isinstance(body, dict) else None
         if not report.check(
-            isinstance(result, dict),
+            response.status_code == 200 and isinstance(result, dict),
             f"tools/list page {page} failed with HTTP {response.status_code}: {response.text[:300]}",
         ):
             return

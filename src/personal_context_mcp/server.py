@@ -261,6 +261,15 @@ class PathAliasMiddleware:
 
 #: Bodies above this are not parsed for the request log; they are still served.
 _LOGGED_BODY_LIMIT = 256 * 1024
+_KNOWN_AUTH_SCHEMES = frozenset({"bearer", "basic", "dpop", "negotiate"})
+
+
+def _credential_scheme(credential: str) -> str | None:
+    """The Authorization scheme name, never any part of the credential itself."""
+    if not credential:
+        return None
+    scheme = credential.split(None, 1)[0].lower()
+    return scheme if scheme in _KNOWN_AUTH_SCHEMES else "unrecognized"
 
 
 def _rpc_summary(body: bytes) -> dict[str, Any]:
@@ -348,7 +357,7 @@ class RequestLogMiddleware:
                 "status": status or 500,
                 "duration_ms": round((time.perf_counter() - started) * 1000, 1),
                 "user_agent": headers.get(b"user-agent", b"").decode("latin-1")[:300],
-                "credential_scheme": credential.split(" ", 1)[0].lower() if credential else None,
+                "credential_scheme": _credential_scheme(credential),
                 "mcp_protocol_version": headers.get(b"mcp-protocol-version", b"").decode("latin-1")
                 or None,
             }
