@@ -563,12 +563,10 @@ def create_app(settings: Settings | None = None) -> Starlette:
         Middleware(BasicClientIdMiddleware),
         Middleware(
             CORSMiddleware,
-            # The provider web apps fetch this endpoint from the browser, so
-            # their origins must be listed or discovery dies in preflight.
-            # OAuth pages are navigated to, not fetched cross-origin. Auth is
-            # a bearer token, so listing origins does not widen a cookie-less
-            # caller.
-            allow_origins=settings.cors_allowed_origins,
+            # MCP clients are server-side; no browser origin needs to read
+            # these responses. The OAuth endpoints are navigated to, not
+            # fetched cross-origin.
+            allow_origins=[],
             allow_methods=["GET", "POST", "DELETE"],
             allow_headers=["authorization", "content-type", "mcp-protocol-version"],
             expose_headers=["mcp-session-id", "www-authenticate"],

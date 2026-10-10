@@ -1,11 +1,13 @@
 #!/bin/sh
-# Migrate once, then run the image command. The default command is serve.
+# Migrate only when the container is starting the server. probe, check,
+# migrate, and other one-off commands run unchanged.
 #
-# Migrations run inside one transaction and are recorded with a content hash,
-# so re-running them on every boot is safe, including when several replicas
-# race. The container binds 0.0.0.0:$PC_PORT and expects TLS to terminate in
-# front of it.
+# A second server starting while the first is still migrating is not
+# serialized. apply_migrations does not take a lock between reading
+# schema_migrations and writing the next version.
 set -eu
 
-personal-context-mcp migrate
+if [ "${1:-}" = "personal-context-mcp" ] && [ "${2:-}" = "serve" ]; then
+  personal-context-mcp migrate
+fi
 exec "$@"

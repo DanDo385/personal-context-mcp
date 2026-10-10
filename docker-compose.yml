@@ -43,7 +43,8 @@ services:
       - "8080:8080"
     volumes:
       - storage:/data/storage
-    # The image entrypoint migrates, then serves.
+    # Default command is `personal-context-mcp serve`. The entrypoint migrates
+    # only in that case.
 
 volumes:
   pgdata:

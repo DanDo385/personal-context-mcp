@@ -70,28 +70,55 @@ async def test_root_reveals_only_service_identity(client) -> None:
     assert set(body) == {"service", "mcp_endpoint", "authorization", "documentation"}
 
 
-async def test_provider_web_origin_passes_cors_preflight(client) -> None:
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://gemini.google.com",
+        "https://chatgpt.com",
+        "https://claude.ai",
+        "https://grok.com",
+    ],
+)
+async def test_browser_preflight_is_not_allowed(client, origin: str) -> None:
     http_client, settings = client
     response = await http_client.options(
         settings.mcp_path,
         headers={
-            "origin": "https://gemini.google.com",
+            "origin": origin,
             "access-control-request-method": "POST",
+            "access-control-request-headers": "authorization,content-type,mcp-protocol-version",
         },
     )
-    assert response.headers.get("access-control-allow-origin") == "https://gemini.google.com"
+    assert "access-control-allow-origin" not in response.headers
 
 
-async def test_unknown_origin_is_not_allowed(client) -> None:
-    http_client, settings = client
-    response = await http_client.options(
-        settings.mcp_path,
-        headers={
-            "origin": "https://evil.example",
-            "access-control-request-method": "POST",
-        },
-    )
-    assert response.headers.get("access-control-allow-origin") != "https://evil.example"
+async def test_authenticated_browser_request_does_not_reflect_origin(client) -> None:
+    """A bearer POST from a browser origin gets no allow-origin header.
+
+    The unit harness does not start the MCP session lifespan, so this POST
+    fails inside the app. The CORS header is still decided on that response.
+    """
+    import httpx
+
+    from personal_context_mcp.server import create_app
+
+    _http_client, settings = client
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
+        response = await http.post(
+            settings.mcp_path,
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            headers={
+                "authorization": "Bearer tok",
+                "origin": "https://gemini.google.com",
+                "accept": "application/json, text/event-stream",
+                "content-type": "application/json",
+                "mcp-protocol-version": "2025-06-18",
+            },
+        )
+    assert response.status_code == 500
+    assert "access-control-allow-origin" not in response.headers
 
 
 async def test_mcp_without_a_token_is_rejected(client) -> None:

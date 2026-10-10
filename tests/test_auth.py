@@ -64,10 +64,13 @@ def test_client_name_substring_match() -> None:
     assert granted == set(expand(["read"]))
 
 
-def test_gemini_policy_matches_spark_client_name() -> None:
+def test_spark_display_names_do_not_receive_gemini_scopes() -> None:
+    """client_name is a registration display name, not a trusted identity."""
     policy = {"gemini": ["*"]}
-    granted = resolve_client_scopes(policy, client_id="unknown", client_name="Spark")
-    assert scopes.MEMORY_WRITE in granted
+    for name in ("Spark", "SparkNotes", "my spark plugin", "Custom apps for Spark"):
+        granted = resolve_client_scopes(policy, client_id="client-1", client_name=name)
+        assert scopes.MEMORY_WRITE not in granted
+        assert granted == set(DEFAULT_SCOPES)
 
 
 def test_wildcard_default_applies_when_nothing_matches() -> None:
@@ -82,7 +85,8 @@ def test_wildcard_default_applies_when_nothing_matches() -> None:
         ("ChatGPT", "chatgpt"),
         ("Claude Desktop", "claude"),
         ("Google Gemini", "gemini"),
-        ("Spark", "gemini"),
+        ("Spark", "unknown"),
+        ("SparkNotes", "unknown"),
         ("Grok", "grok"),
         ("OpenAI Connector", "chatgpt"),
         ("Anthropic", "claude"),
