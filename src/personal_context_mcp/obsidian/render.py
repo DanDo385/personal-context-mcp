@@ -191,6 +191,7 @@ def render_moc(
     section_titles: dict[str, str],
     children: list[tuple[str, str]] | None = None,
     parent: tuple[str, str] | None = None,
+    projects: list[tuple[str, str]] | None = None,
 ) -> str:
     """A Map of Content: sections in the order of ``section_titles``, entries
     sorted by title. Entirely generated - a MOC has no human-owned body."""
@@ -218,8 +219,15 @@ def render_moc(
             for stem, title in sorted(entries, key=lambda e: e[1].lower())
         ]
         parts.append("")
+    if projects:
+        parts += ["## Projects", ""]
+        parts += [
+            f"- {wikilink(target, title)}"
+            for target, title in sorted(projects, key=lambda e: e[1].lower())
+        ]
+        parts.append("")
     if children:
-        parts += ["## Sub-maps", ""]
+        parts += ["## Maps" if projects else "## Sub-maps", ""]
         parts += [
             f"- {wikilink(stem, title)}"
             for stem, title in sorted(children, key=lambda e: e[1].lower())
@@ -269,7 +277,14 @@ def render_artifact_note(
     return "\n".join(lines)
 
 
-def render_project(project: dict[str, Any], snapshot: dict[str, Any]) -> str:
+def render_project(
+    project: dict[str, Any],
+    snapshot: dict[str, Any],
+    *,
+    notes: list[tuple[str, str, str]] | None = None,
+    home: tuple[str, str] | None = None,
+) -> str:
+    """The project's page and hub. ``notes`` is (link target, title, note class)."""
     front = _frontmatter(
         {
             "pc_type": "project",
@@ -304,6 +319,22 @@ def render_project(project: dict[str, Any], snapshot: dict[str, Any]) -> str:
     events = snapshot.get("recent_events") or []
     if events:
         lines += ["## Recent activity", ""]
-        lines += [f"- _{e['created_at']:%Y-%m-%d}_ — {e['summary']}" for e in events]
+        lines += [f"- _{e['created_at']:%Y-%m-%d}_: {e['summary']}" for e in events]
         lines.append("")
+
+    if notes:
+        lines += ["## Notes", ""]
+        by_class: dict[str, list[tuple[str, str]]] = {}
+        for target, title, note_class in notes:
+            by_class.setdefault(note_class or "other", []).append((target, title))
+        for note_class in sorted(by_class):
+            if len(by_class) > 1:
+                lines += [f"### {note_class.replace('_', ' ').title()}", ""]
+            lines += [
+                f"- {wikilink(target, title)}"
+                for target, title in sorted(by_class[note_class], key=lambda e: e[1].lower())
+            ]
+            lines.append("")
+    if home:
+        lines += [f"Part of {wikilink(*home)}.", ""]
     return "\n".join(lines)

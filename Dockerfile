@@ -35,11 +35,14 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app src/ ./src/
 COPY --chown=app:app migrations/ ./migrations/
 COPY --chown=app:app skills/ ./skills/
+COPY --chown=app:app docker-entrypoint.sh /app/docker-entrypoint.sh
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PC_PORT=8080
+
+RUN chmod 555 /app/docker-entrypoint.sh
 
 USER app
 EXPOSE 8080
@@ -47,4 +50,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request,os,sys; sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PC_PORT\",\"8080\")}/healthz', timeout=4).status==200 else 1)"]
 
-CMD ["personal-context-mcp", "serve"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

@@ -183,7 +183,9 @@ def register(mcp: FastMCP) -> None:
         ],
         content: Annotated[str, Field(description="The complete file contents.")],
         title: Annotated[str | None, Field(description="Defaults to the filename.")] = None,
-        description: str | None = None,
+        description: Annotated[
+            str | None, Field(description="What the file is and why it was kept.")
+        ] = None,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         conversation_id: Annotated[
             str | None, Field(description="This conversation's id in your platform.")
@@ -242,9 +244,13 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ],
-        description: str | None = None,
+        description: Annotated[
+            str | None, Field(description="What the project is and why it was kept.")
+        ] = None,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
-        conversation_id: str | None = None,
+        conversation_id: Annotated[
+            str | None, Field(description="This conversation's id in your platform.")
+        ] = None,
     ) -> dict:
         """Save a multi-file project as ONE artifact with its tree intact.
 
@@ -299,9 +305,11 @@ def register(mcp: FastMCP) -> None:
                 description=f"Base64 of the file. Maximum {MAX_INLINE_BASE64_BYTES} decoded bytes."
             ),
         ],
-        title: str | None = None,
-        description: str | None = None,
-        project: str | None = None,
+        title: Annotated[str | None, Field(description="Defaults to the filename.")] = None,
+        description: Annotated[
+            str | None, Field(description="What the file is and why it was kept.")
+        ] = None,
+        project: Annotated[str | None, Field(description="Project slug or name.")] = None,
     ) -> dict:
         """Save a SMALL binary file you have the actual bytes for.
 
@@ -358,8 +366,10 @@ def register(mcp: FastMCP) -> None:
         mime_type: Annotated[
             str | None, Field(description="Detected automatically if omitted.")
         ] = None,
-        project: str | None = None,
-        description: str | None = None,
+        project: Annotated[str | None, Field(description="Project slug or name.")] = None,
+        description: Annotated[
+            str | None, Field(description="What the file is and why it was kept.")
+        ] = None,
     ) -> dict:
         """Get a signed URL to upload a large file directly to object storage.
 
@@ -423,7 +433,7 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.ARTIFACTS_WRITE),
     )
     async def artifact_complete_upload(
-        artifact_id: UUID,
+        artifact_id: Annotated[UUID, Field(description="Artifact id from artifact_begin_upload.")],
         relative_path: Annotated[str, Field(description="Path returned by artifact_begin_upload.")],
         sha256: Annotated[str, Field(description="SHA-256 hex digest of the uploaded bytes.")],
     ) -> dict:
@@ -501,8 +511,10 @@ def register(mcp: FastMCP) -> None:
                 description="Known filenames, as objects with 'filename' and optional 'byte_size'."
             ),
         ] = [],
-        project: str | None = None,
-        conversation_id: str | None = None,
+        project: Annotated[str | None, Field(description="Project slug or name.")] = None,
+        conversation_id: Annotated[
+            str | None, Field(description="This conversation's id in your platform.")
+        ] = None,
     ) -> dict:
         """Record that an artifact existed WITHOUT claiming we have its bytes.
 
@@ -553,10 +565,12 @@ def register(mcp: FastMCP) -> None:
     )
     async def artifact_search(
         query: Annotated[str, Field(description="Words from the title or description.")] = "",
-        limit: Annotated[int, Field(ge=1, le=50)] = 20,
-        project: str | None = None,
-        artifact_type: str | None = None,
-        provider: str | None = None,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum artifacts to return.")] = 20,
+        project: Annotated[str | None, Field(description="Project slug or name.")] = None,
+        artifact_type: Annotated[str | None, Field(description="Filter by artifact type.")] = None,
+        provider: Annotated[
+            str | None, Field(description="chatgpt, claude, gemini or grok.")
+        ] = None,
         storage_status: Annotated[
             str | None,
             Field(description="captured, referenced, pending_import or failed."),
@@ -643,8 +657,12 @@ def register(mcp: FastMCP) -> None:
             dict[str, str],
             Field(description="The complete new file set, as path -> contents."),
         ],
-        title: str | None = None,
-        description: str | None = None,
+        title: Annotated[
+            str | None, Field(description="New title. Keeps the old one when omitted.")
+        ] = None,
+        description: Annotated[
+            str | None, Field(description="New description. Keeps the old one when omitted.")
+        ] = None,
     ) -> dict:
         """Save a new version of an existing artifact, linked to the previous one.
 

@@ -30,7 +30,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="active, paused, done, archived, or null for all."),
         ] = "active",
-        limit: Annotated[int, Field(ge=1, le=100)] = 50,
+        limit: Annotated[int, Field(ge=1, le=100, description="Maximum projects to return.")] = 50,
     ) -> list[ProjectRecord]:
         """The user's projects, most recently active first."""
         return await get_services().projects.list_all(status=status, limit=limit)
@@ -43,7 +43,7 @@ def register(mcp: FastMCP) -> None:
     )
     async def project_search(
         query: Annotated[str, Field(description="Words from the project name.")],
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum projects to return.")] = 10,
     ) -> list[ProjectRecord]:
         """Find a project by name. Call before project_create."""
         return await get_services().projects.search(query, limit=limit)
@@ -71,7 +71,9 @@ def register(mcp: FastMCP) -> None:
     )
     async def project_create(
         name: Annotated[str, Field(description="Project name, as the user says it.")],
-        description: str | None = None,
+        description: Annotated[
+            str | None, Field(description="One line on what the project is about.")
+        ] = None,
         goals: Annotated[str | None, Field(description="What finishing it looks like.")] = None,
     ) -> ProjectRecord:
         """Create a project. Call project_search first - a second project for
@@ -103,8 +105,12 @@ def register(mcp: FastMCP) -> None:
         status: Annotated[
             str | None, Field(description="active, paused, done or archived.")
         ] = None,
-        goals: str | None = None,
-        description: str | None = None,
+        goals: Annotated[
+            str | None, Field(description="New statement of what finishing it looks like.")
+        ] = None,
+        description: Annotated[
+            str | None, Field(description="New one-line description of the project.")
+        ] = None,
     ) -> ProjectRecord:
         """Change a project's status, goals or description."""
         services = get_services()
@@ -132,7 +138,9 @@ def register(mcp: FastMCP) -> None:
         event_type: Annotated[
             str, Field(description="status_change, milestone, note, blocker or update.")
         ] = "update",
-        detail: str | None = None,
+        detail: Annotated[
+            str | None, Field(description="Longer detail on what happened, if any.")
+        ] = None,
     ) -> dict:
         """Append an event to a project's log. Identical events are not repeated."""
         services = get_services()
@@ -161,8 +169,8 @@ def register(mcp: FastMCP) -> None:
     )
     async def note_search(
         query: Annotated[str, Field(description="What to look for.")],
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
-        project: str | None = None,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum notes to return.")] = 10,
+        project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         note_class: Annotated[
             str | None,
             Field(description="project, research, wiki, concept, resource, daily or inbox."),

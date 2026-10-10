@@ -90,6 +90,27 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 120
     rate_limit_burst: int = 40
 
+    #: Browser origins allowed to call the MCP endpoint cross-origin. The web
+    #: clients (Gemini, ChatGPT, Claude, Grok) issue browser-side fetches, so
+    #: an empty list means their discovery calls die in CORS preflight and no
+    #: tools ever appear. Authentication is bearer-token based (no cookies),
+    #: so listing these origins widens nothing for a token-less caller.
+    #: Extra origins via PC_CORS_ALLOWED_ORIGINS (comma-separated or JSON).
+    cors_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "https://gemini.google.com",
+            "https://chatgpt.com",
+            "https://chat.openai.com",
+            "https://claude.ai",
+            "https://grok.com",
+        ]
+    )
+    #: Log full JSON-RPC request bodies on the MCP endpoint. Off by default:
+    #: bodies carry user content, and the INFO log always carries the method,
+    #: tool name and parameter keys instead. Enable temporarily (never in
+    #: prod) to capture raw handshake payloads while debugging a client.
+    log_rpc_bodies: bool = False
+
     # --------------------------------------------------------------- storage
     storage_backend: StorageBackend = "supabase"
     supabase_url: str = ""
@@ -211,6 +232,7 @@ class Settings(BaseSettings):
         "allowed_subjects",
         "allowed_hosts",
         "no_external_sensitivity",
+        "cors_allowed_origins",
         mode="before",
     )
     @classmethod

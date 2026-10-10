@@ -61,6 +61,10 @@ READ_SCOPES: tuple[str, ...] = tuple(s for s in ALL_SCOPES if s.endswith(":read"
 #: cannot mutate anything until the operator says so.
 DEFAULT_SCOPES: tuple[str, ...] = READ_SCOPES
 
+#: Client-name aliases for policy matching. Gemini's MCP client identifies as
+#: "Spark", never as "Gemini".
+_CLIENT_ALIASES: dict[str, str] = {"spark": "gemini"}
+
 
 def expand(scopes: list[str] | tuple[str, ...]) -> set[str]:
     """Expand policy shorthands.
@@ -102,8 +106,15 @@ def resolve_client_scopes(
 
     if client_name:
         lowered = client_name.lower()
+        # Gemini registers as "Spark" (Custom apps for Spark), so a policy
+        # keyed on "gemini" would otherwise miss it and silently drop the
+        # client to the read-only default, hiding every write tool.
+        candidates = {lowered}
+        for alias, canonical in _CLIENT_ALIASES.items():
+            if alias in lowered:
+                candidates.add(canonical)
         for key, scopes in policy.items():
-            if key not in ("*", "") and key.lower() in lowered:
+            if key not in ("*", "") and any(key.lower() in candidate for candidate in candidates):
                 return expand(scopes)
 
     if "*" in policy:
@@ -122,6 +133,11 @@ def provider_from_client(client_name: str | None, client_id: str | None = None) 
     for provider in ("chatgpt", "claude", "gemini", "grok"):
         if provider in haystack:
             return provider
+    # Gemini registers its MCP client as "Spark" (Custom apps for Spark), so
+    # the product name never appears in the client name. Map it explicitly or
+    # Gemini traffic is attributed to "unknown" in the audit trail.
+    if "spark" in haystack:
+        return "gemini"
     if "openai" in haystack:
         return "chatgpt"
     if "anthropic" in haystack:

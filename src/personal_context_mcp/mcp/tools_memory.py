@@ -67,7 +67,14 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = "user_statement",
-        importance: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
+        importance: Annotated[
+            float,
+            Field(
+                ge=0.0,
+                le=1.0,
+                description="How important this is, 0 to 1. Leave at 0.5 unless it clearly matters more or less.",
+            ),
+        ] = 0.5,
         sensitivity: Annotated[
             str,
             Field(
@@ -120,7 +127,7 @@ def register(mcp: FastMCP) -> None:
     )
     async def memory_search(
         query: Annotated[str, Field(description="What to look for.")],
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum memories to return.")] = 10,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         kind: Annotated[str | None, Field(description="Filter by memory kind.")] = None,
     ) -> list[MemoryRecord]:
@@ -143,7 +150,9 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.MEMORY_READ),
         annotations={"readOnlyHint": True},
     )
-    async def memory_history(memory_id: UUID) -> dict:
+    async def memory_history(
+        memory_id: Annotated[UUID, Field(description="Memory id from memory_search.")],
+    ) -> dict:
         """Every recorded version of one memory, newest first.
 
         Use to answer "when did I say that" or "what did this used to say".
@@ -188,14 +197,36 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = None,
-        decisions: list[CheckpointDecision] = [],
-        facts: list[CheckpointFact] = [],
-        tasks: list[CheckpointTask] = [],
-        list_updates: list[CheckpointListUpdate] = [],
-        project_updates: list[CheckpointProjectUpdate] = [],
-        open_questions: list[str] = [],
-        artifacts: list[CheckpointArtifactRef] = [],
-        important_context: list[str] = [],
+        decisions: Annotated[
+            list[CheckpointDecision],
+            Field(description="Things settled, one statement each. Omit when nothing was decided."),
+        ] = [],
+        facts: Annotated[
+            list[CheckpointFact],
+            Field(description="Durable facts worth remembering. Omit conversational noise."),
+        ] = [],
+        tasks: Annotated[
+            list[CheckpointTask], Field(description="Concrete unfinished actions. Omit when none.")
+        ] = [],
+        list_updates: Annotated[
+            list[CheckpointListUpdate],
+            Field(description="Additions and completions on existing lists. Omit when none."),
+        ] = [],
+        project_updates: Annotated[
+            list[CheckpointProjectUpdate],
+            Field(description="Status or goal changes. Omit when nothing changed."),
+        ] = [],
+        open_questions: Annotated[
+            list[str], Field(description="What is still unresolved. Omit when nothing is open.")
+        ] = [],
+        artifacts: Annotated[
+            list[CheckpointArtifactRef],
+            Field(description="Files or references this session produced. Omit when none."),
+        ] = [],
+        important_context: Annotated[
+            list[str],
+            Field(description="Anything else a future session needs to know. Omit when none."),
+        ] = [],
         model: Annotated[str | None, Field(description="Your model name, for provenance.")] = None,
         sensitivity: Annotated[
             str, Field(description="normal, private or highly_sensitive.")
@@ -240,7 +271,7 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True},
     )
     async def session_recent(
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum summaries to return.")] = 10,
         provider: Annotated[str | None, Field(description="Filter by provider.")] = None,
         project: Annotated[str | None, Field(description="Filter by project.")] = None,
     ) -> list[dict]:

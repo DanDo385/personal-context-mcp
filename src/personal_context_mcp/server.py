@@ -45,6 +45,7 @@ from personal_context_mcp.mcp import register_all
 from personal_context_mcp.services import build_services, get_services, set_services
 from personal_context_mcp.storage import build_object_store
 from personal_context_mcp.storage.local import LocalObjectStore
+from personal_context_mcp.telemetry import McpTelemetryMiddleware
 
 logger = get_logger(__name__)
 
@@ -327,13 +328,17 @@ def create_app(settings: Settings | None = None) -> Starlette:
     routes = _build_routes(settings, mcp_app)
 
     middleware = [
+        Middleware(McpTelemetryMiddleware, log_bodies=settings.log_rpc_bodies),
         Middleware(SecurityHeadersMiddleware),
         Middleware(
             CORSMiddleware,
-            # MCP clients are server-side; no browser origin needs to read
-            # these responses. The OAuth endpoints are navigated to, not
-            # fetched cross-origin.
-            allow_origins=[],
+            # The provider web apps issue browser-side fetches against this
+            # endpoint, so their origins must be listed or discovery dies in
+            # CORS preflight and no tools ever appear. The OAuth endpoints
+            # are navigated to, not fetched cross-origin. Auth is
+            # bearer-token based (no cookies), so listing origins widens
+            # nothing for a token-less caller.
+            allow_origins=settings.cors_allowed_origins,
             allow_methods=["GET", "POST", "DELETE"],
             allow_headers=["authorization", "content-type", "mcp-protocol-version"],
             expose_headers=["mcp-session-id", "www-authenticate"],

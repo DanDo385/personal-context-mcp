@@ -11,6 +11,7 @@ Helpers for putting the server online and keeping the Obsidian helper running. N
 | `install-worker.sh` | macOS: installs the Obsidian helper as a LaunchAgent (starts at login, restarts on failure). Reads `deploy/worker.env.op` through `op run` if present, else `.env.local`. |
 | `obsidian-sync.plist` | The LaunchAgent template `install-worker.sh` fills in. |
 | `install-gemini-sync.sh`, `gemini-sync.plist` | macOS: pushes the Personal Context digest to its Google Doc weekly for a Gemini Gem ([guide 11](../docs/guides/11-gemini-without-custom-apps.md)). |
+| `docker-entrypoint.sh` *(repo root)* | Container entrypoint: runs `personal-context-mcp migrate` (idempotent, transaction-safe), then `exec personal-context-mcp serve`. The image sets it as `ENTRYPOINT`, so any persistent host (VM, NAS, host with TLS in front) keeps StreamableHTTP up for web, iOS and Android clients with no tunnels. |
 | `*.env.op.example` | Templates of `op://` reference files: `production` (what Vercel gets), `admin` (commands you run against production), `worker` (the Obsidian helper). Copy to the name without `.example`; the copies are Git-ignored. |
 | `local.env` *(yours, Git-ignored)* | Personal defaults for the scripts. See below. |
 
