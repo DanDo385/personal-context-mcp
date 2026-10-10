@@ -64,6 +64,12 @@ def test_client_name_substring_match() -> None:
     assert granted == set(expand(["read"]))
 
 
+def test_gemini_policy_matches_spark_client_name() -> None:
+    policy = {"gemini": ["*"]}
+    granted = resolve_client_scopes(policy, client_id="unknown", client_name="Spark")
+    assert scopes.MEMORY_WRITE in granted
+
+
 def test_wildcard_default_applies_when_nothing_matches() -> None:
     policy = {"*": ["memory:read", "context:read"]}
     granted = resolve_client_scopes(policy, client_id="q", client_name="Unknown App")
@@ -76,6 +82,7 @@ def test_wildcard_default_applies_when_nothing_matches() -> None:
         ("ChatGPT", "chatgpt"),
         ("Claude Desktop", "claude"),
         ("Google Gemini", "gemini"),
+        ("Spark", "gemini"),
         ("Grok", "grok"),
         ("OpenAI Connector", "chatgpt"),
         ("Anthropic", "claude"),

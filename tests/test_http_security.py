@@ -70,6 +70,30 @@ async def test_root_reveals_only_service_identity(client) -> None:
     assert set(body) == {"service", "mcp_endpoint", "authorization", "documentation"}
 
 
+async def test_provider_web_origin_passes_cors_preflight(client) -> None:
+    http_client, settings = client
+    response = await http_client.options(
+        settings.mcp_path,
+        headers={
+            "origin": "https://gemini.google.com",
+            "access-control-request-method": "POST",
+        },
+    )
+    assert response.headers.get("access-control-allow-origin") == "https://gemini.google.com"
+
+
+async def test_unknown_origin_is_not_allowed(client) -> None:
+    http_client, settings = client
+    response = await http_client.options(
+        settings.mcp_path,
+        headers={
+            "origin": "https://evil.example",
+            "access-control-request-method": "POST",
+        },
+    )
+    assert response.headers.get("access-control-allow-origin") != "https://evil.example"
+
+
 async def test_mcp_without_a_token_is_rejected(client) -> None:
     http_client, settings = client
     response = await http_client.post(

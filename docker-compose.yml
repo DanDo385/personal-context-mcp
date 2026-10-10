@@ -43,8 +43,7 @@ services:
       - "8080:8080"
     volumes:
       - storage:/data/storage
-    command: >
-      sh -c "personal-context-mcp migrate && personal-context-mcp serve"
+    # The image entrypoint migrates, then serves.
 
 volumes:
   pgdata:

@@ -61,6 +61,19 @@ READ_SCOPES: tuple[str, ...] = tuple(s for s in ALL_SCOPES if s.endswith(":read"
 #: cannot mutate anything until the operator says so.
 DEFAULT_SCOPES: tuple[str, ...] = READ_SCOPES
 
+#: Gemini's MCP client identifies itself as "Spark", never as "Gemini".
+_CLIENT_ALIASES: dict[str, str] = {"spark": "gemini"}
+
+
+def _with_aliases(name: str) -> set[str]:
+    """The name plus any canonical provider name its alias stands for."""
+    lowered = name.lower()
+    candidates = {lowered}
+    for alias, canonical in _CLIENT_ALIASES.items():
+        if alias in lowered:
+            candidates.add(canonical)
+    return candidates
+
 
 def expand(scopes: list[str] | tuple[str, ...]) -> set[str]:
     """Expand policy shorthands.
@@ -93,7 +106,8 @@ def resolve_client_scopes(
       1. exact ``client_id``
       2. a key that appears (case-insensitively) in the client's display name,
          which is how "chatgpt" / "claude" / "gemini" / "grok" are targeted -
-         each provider sends its own product name at registration
+         each provider sends its own product name at registration.
+         Gemini sends "Spark"; that alias also matches a "gemini" key.
       3. the ``"*"`` default
       4. :data:`DEFAULT_SCOPES`
     """
@@ -101,9 +115,9 @@ def resolve_client_scopes(
         return expand(policy[client_id])
 
     if client_name:
-        lowered = client_name.lower()
+        candidates = _with_aliases(client_name)
         for key, scopes in policy.items():
-            if key not in ("*", "") and key.lower() in lowered:
+            if key not in ("*", "") and any(key.lower() in candidate for candidate in candidates):
                 return expand(scopes)
 
     if "*" in policy:
@@ -122,6 +136,9 @@ def provider_from_client(client_name: str | None, client_id: str | None = None) 
     for provider in ("chatgpt", "claude", "gemini", "grok"):
         if provider in haystack:
             return provider
+    for alias, canonical in _CLIENT_ALIASES.items():
+        if alias in haystack:
+            return canonical
     if "openai" in haystack:
         return "chatgpt"
     if "anthropic" in haystack:

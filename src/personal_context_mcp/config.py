@@ -90,6 +90,21 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 120
     rate_limit_burst: int = 40
 
+    #: Browser origins allowed to call the MCP endpoint cross-origin. The web
+    #: apps issue browser fetches, so an empty list makes their discovery die
+    #: in CORS preflight. Auth is a bearer token, not a cookie, so naming
+    #: these origins does not grant a token-less page access. Replace the
+    #: list with PC_CORS_ALLOWED_ORIGINS (comma-separated or JSON).
+    cors_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "https://gemini.google.com",
+            "https://chatgpt.com",
+            "https://chat.openai.com",
+            "https://claude.ai",
+            "https://grok.com",
+        ]
+    )
+
     # --------------------------------------------------------------- storage
     storage_backend: StorageBackend = "supabase"
     supabase_url: str = ""
@@ -211,6 +226,7 @@ class Settings(BaseSettings):
         "allowed_subjects",
         "allowed_hosts",
         "no_external_sensitivity",
+        "cors_allowed_origins",
         mode="before",
     )
     @classmethod
