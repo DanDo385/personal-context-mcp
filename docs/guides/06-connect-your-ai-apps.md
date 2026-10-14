@@ -55,6 +55,11 @@ and MCP prompts, which are loaded only when needed.
 The menus in these apps move around every few months. If a menu name doesn't match, look for
 "Connectors", "Apps" or "Integrations" in the settings, and check the full guide for the latest notes.
 
+> **Same account everywhere.** Step 2's sign-in works with any Google account, but only the email(s)
+> in `PC_ALLOWED_SUBJECTS` get in, and Gemini additionally refuses custom apps for work/school
+> (Workspace) accounts. Use one **personal** Google account for all four apps, and make sure it's
+> the one you gave the setup wizard.
+
 ## Recommended: turn off each app's built-in memory
 
 Each app also keeps its own private memory of you. Left on, it competes with Personal Context: an
