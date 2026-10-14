@@ -119,6 +119,62 @@ async def test_lists_round_trip_through_mcp(mcp_client) -> None:
     ]
 
 
+async def test_find_item_searches_archived_lists_when_asked(mcp_client, services) -> None:
+    """An archived list's items stay findable when include_archived is set.
+
+    Regression: search_items filtered ``l.status = 'active'``, so archiving
+    a list made its items invisible to list_find_item even by exact text.
+    """
+    await mcp_client.call_tool("list_create", {"name": "Archive probe", "list_type": "task"})
+    await mcp_client.call_tool("list_create", {"name": "Active probe", "list_type": "task"})
+    await mcp_client.call_tool(
+        "list_add_item", {"list": "archive-probe", "text": "Sockeye salmon run report"}
+    )
+    await mcp_client.call_tool(
+        "list_add_item", {"list": "archive-probe", "text": "Halibut report archived"}
+    )
+    await mcp_client.call_tool(
+        "list_add_item", {"list": "active-probe", "text": "Salmon run active"}
+    )
+    await mcp_client.call_tool(
+        "list_add_item", {"list": "active-probe", "text": "Halibut report active"}
+    )
+    await services.lists.archive("archive-probe")
+
+    async def texts(args: dict) -> list[str]:
+        result = await mcp_client.call_tool("list_find_item", args)
+        return [i["text"] for i in result.structured_content["result"]]
+
+    # 1. Matching active item found with the flag omitted.
+    assert "Salmon run active" in await texts({"query": "salmon"})
+
+    # 2. Archived item excluded by default.
+    assert "Sockeye salmon run report" not in await texts({"query": "salmon"})
+
+    # 3. Matching archived item included when requested.
+    assert "Sockeye salmon run report" in await texts({"query": "salmon", "include_archived": True})
+
+    # 4. The text filter still holds for every row, flag or not. Under
+    #    ``active OR flag AND rest`` an active row would bypass the rest,
+    #    returning every item in every active list for any query.
+    assert await texts({"query": "halibut"}) == ["Halibut report active"]
+    assert await texts({"query": "halibut", "include_archived": True}) == [
+        "Halibut report active",
+        "Halibut report archived",
+    ]
+
+    # 5. The item-status filter still applies on top of both.
+    active_salmon = await mcp_client.call_tool("list_get", {"list": "active-probe"})
+    salmon_id = next(
+        i["id"]
+        for i in active_salmon.structured_content["items"]
+        if i["text"] == "Salmon run active"
+    )
+    await mcp_client.call_tool("list_update_item", {"item_id": salmon_id, "status": "done"})
+    assert "Salmon run active" not in await texts({"query": "salmon", "status": "open"})
+    assert "Salmon run active" in await texts({"query": "salmon", "status": "done"})
+
+
 async def test_artifact_bundle_through_mcp_reports_capture_honestly(mcp_client) -> None:
     result = await mcp_client.call_tool(
         "artifact_save_bundle",

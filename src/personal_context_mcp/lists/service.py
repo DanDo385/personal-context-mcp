@@ -419,14 +419,19 @@ class ListService:
         return [_item_record(r) for r in rows]
 
     async def search_items(
-        self, query: str, *, limit: int = 20, status: str | None = None
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        status: str | None = None,
+        include_archived: bool = False,
     ) -> list[ListItemRecord]:
         rows = await self._db.fetch(
             """
             SELECT i.*, l.slug AS list_slug,
                    ts_rank_cd(i.search_tsv, websearch_to_tsquery('english', $1)) AS rank
             FROM list_items i JOIN lists l ON l.id = i.list_id
-            WHERE l.status = 'active'
+            WHERE ($4::boolean OR l.status = 'active')
               AND (i.search_tsv @@ websearch_to_tsquery('english', $1)
                    OR i.text ILIKE '%' || $1 || '%')
               AND ($2::text IS NULL OR i.status = $2)
@@ -436,5 +441,6 @@ class ListService:
             query,
             status,
             limit,
+            include_archived,
         )
         return [_item_record(r) for r in rows]

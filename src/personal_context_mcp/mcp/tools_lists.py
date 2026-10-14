@@ -271,9 +271,18 @@ def register(mcp: FastMCP) -> None:
         query: Annotated[str, Field(description="Words from the item.")],
         limit: Annotated[int, Field(ge=1, le=30)] = 10,
         status: Annotated[str | None, Field(description="Filter by status.")] = None,
+        include_archived: Annotated[
+            bool, Field(description="Also search items in archived lists.")
+        ] = False,
     ) -> list[dict]:
-        """Search items across every list, when you know the item but not the list."""
-        items = await get_services().lists.search_items(query, limit=limit, status=status)
+        """Search items across every list, when you know the item but not the list.
+
+        Archived lists are skipped unless include_archived is set; their items
+        are otherwise invisible to this search.
+        """
+        items = await get_services().lists.search_items(
+            query, limit=limit, status=status, include_archived=include_archived
+        )
         return [_with_list(item) for item in items]
 
 
