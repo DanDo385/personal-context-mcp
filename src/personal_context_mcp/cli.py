@@ -3,6 +3,7 @@
 personal-context-mcp serve
 personal-context-mcp migrate [--status]
 personal-context-mcp check
+personal-context-mcp probe <url> [--token TOKEN]
 personal-context-mcp import <provider|auto> <archive.zip>
 personal-context-mcp reclassify [--limit N]
 personal-context-mcp review
@@ -35,6 +36,7 @@ from personal_context_mcp.importers.reclassify import (
 )
 from personal_context_mcp.importers.runner import ImportRunner
 from personal_context_mcp.logging_setup import configure_logging
+from personal_context_mcp.probe import DEFAULT_PROTOCOL_VERSION, run_probe
 from personal_context_mcp.services import build_services, set_services
 from personal_context_mcp.setup_wizard import Answers, build_env, next_steps
 from personal_context_mcp.vault_plan import VaultCandidate, vault_candidates
@@ -283,6 +285,48 @@ def check() -> None:
     if failures:
         raise SystemExit(1)
     click.secho("\nAll checks passed.", fg="green", bold=True)
+
+
+@main.command()
+@click.argument("url")
+@click.option(
+    "--token",
+    envvar="PC_PROBE_TOKEN",
+    default=None,
+    help="Bearer token for the full handshake. Without one, only the sign-in "
+    "discovery is checked. Also read from PC_PROBE_TOKEN.",
+)
+@click.option(
+    "--protocol-version",
+    default=DEFAULT_PROTOCOL_VERSION,
+    show_default=True,
+    help="MCP protocol revision to ask for in initialize.",
+)
+@click.option(
+    "--no-oauth",
+    is_flag=True,
+    help="The server uses PC_AUTH_MODE=static or jwt: skip the sign-in discovery checks.",
+)
+def probe(url: str, token: str | None, protocol_version: str, no_oauth: bool) -> None:
+    """Connect to a running server the way an AI app does, and report problems.
+
+    URL is the MCP endpoint, for example https://<your-host>/mcp. Prints every
+    response as received; read-only tool calls only.
+    """
+    report = run_probe(
+        url,
+        token=token,
+        protocol_version=protocol_version,
+        oauth=not no_oauth,
+        echo=click.echo,
+    )
+    click.echo()
+    for failure in report.failures:
+        click.secho(f"  FAIL {failure}", fg="red")
+    if report.failures:
+        click.secho(f"{len(report.failures)} of {report.checks} checks failed.", fg="red")
+        raise SystemExit(1)
+    click.secho(f"All {report.checks} checks passed.", fg="green", bold=True)
 
 
 @main.command(name="import")

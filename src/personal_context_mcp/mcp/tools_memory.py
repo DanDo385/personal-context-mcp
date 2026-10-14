@@ -67,7 +67,14 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = "user_statement",
-        importance: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
+        importance: Annotated[
+            float,
+            Field(
+                ge=0.0,
+                le=1.0,
+                description="How much this matters in future sessions, 0 to 1. Leave at 0.5 unless the user said it matters more or less.",
+            ),
+        ] = 0.5,
         sensitivity: Annotated[
             str,
             Field(
@@ -120,7 +127,7 @@ def register(mcp: FastMCP) -> None:
     )
     async def memory_search(
         query: Annotated[str, Field(description="What to look for.")],
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum results to return.")] = 10,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         kind: Annotated[str | None, Field(description="Filter by memory kind.")] = None,
     ) -> list[MemoryRecord]:
@@ -143,7 +150,11 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.MEMORY_READ),
         annotations={"readOnlyHint": True},
     )
-    async def memory_history(memory_id: UUID) -> dict:
+    async def memory_history(
+        memory_id: Annotated[
+            UUID, Field(description="The memory's id, from memory_search or context results.")
+        ],
+    ) -> dict:
         """Every recorded version of one memory, newest first.
 
         Use to answer "when did I say that" or "what did this used to say".
@@ -188,14 +199,43 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = None,
-        decisions: list[CheckpointDecision] = [],
-        facts: list[CheckpointFact] = [],
-        tasks: list[CheckpointTask] = [],
-        list_updates: list[CheckpointListUpdate] = [],
-        project_updates: list[CheckpointProjectUpdate] = [],
-        open_questions: list[str] = [],
-        artifacts: list[CheckpointArtifactRef] = [],
-        important_context: list[str] = [],
+        decisions: Annotated[
+            list[CheckpointDecision],
+            Field(description="Decisions made in this conversation. Empty when none were made."),
+        ] = [],
+        facts: Annotated[
+            list[CheckpointFact],
+            Field(
+                description="Durable facts worth remembering in future sessions. Not conversational noise."
+            ),
+        ] = [],
+        tasks: Annotated[
+            list[CheckpointTask],
+            Field(description="Concrete unfinished actions. Each goes onto a list."),
+        ] = [],
+        list_updates: Annotated[
+            list[CheckpointListUpdate],
+            Field(description="Items to add to, complete on or remove from the user's real lists."),
+        ] = [],
+        project_updates: Annotated[
+            list[CheckpointProjectUpdate],
+            Field(description="Status or goal changes to existing projects."),
+        ] = [],
+        open_questions: Annotated[
+            list[str], Field(description="Questions raised and left unresolved, one sentence each.")
+        ] = [],
+        artifacts: Annotated[
+            list[CheckpointArtifactRef],
+            Field(
+                description="Artifacts this conversation produced or used, by artifact_id from an artifact tool."
+            ),
+        ] = [],
+        important_context: Annotated[
+            list[str],
+            Field(
+                description="Other context a future session needs that fits none of the fields above."
+            ),
+        ] = [],
         model: Annotated[str | None, Field(description="Your model name, for provenance.")] = None,
         sensitivity: Annotated[
             str, Field(description="normal, private or highly_sensitive.")
@@ -240,7 +280,7 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True},
     )
     async def session_recent(
-        limit: Annotated[int, Field(ge=1, le=50)] = 10,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum results to return.")] = 10,
         provider: Annotated[str | None, Field(description="Filter by provider.")] = None,
         project: Annotated[str | None, Field(description="Filter by project.")] = None,
     ) -> list[dict]:

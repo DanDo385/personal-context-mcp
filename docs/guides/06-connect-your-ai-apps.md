@@ -9,6 +9,18 @@ the app's phone version. Every app follows the same three steps:
    setup wizard.
 3. **Paste the custom instruction** so the app knows when to use its new memory.
 
+## Check the server first (1 minute)
+
+Before adding it to any app, let your computer connect to the server the same way the apps do:
+
+```bash
+uv run personal-context-mcp probe https://<your-address>/mcp
+```
+
+✅ It prints what the server answered at each step and ends with `All 7 checks passed.` That means
+the apps can find the sign-in page and register themselves. If a line starts with `FAIL`, it says
+which step broke; fix that before connecting any app.
+
 ## The custom instruction (same for every app)
 
 Copy the text below and paste it into each app's custom instruction field:
@@ -117,7 +129,8 @@ learned it, another one knew it.
 | The sign-in window says `redirect_uri_mismatch` | Your Google client's redirect URI doesn't match your address + `/auth/callback` ([guide 3](03-google-sign-in.md)). |
 | Sign-in works, then *access denied* / *not allowed* | You chose a Google account that isn't in `PC_ALLOWED_SUBJECTS`. |
 | ChatGPT has no *Apps & Connectors*, only *Plugins* | That's the newer layout. Turn on **Settings → Security and login → Developer mode**, then add the server under **Settings → Plugins → +**. |
-| The connector was added but no tools appear | Remove it and add it again, or reload the page. ChatGPT especially sometimes needs this. |
+| The connector was added but no tools appear | Run the check in [Check the server first](#check-the-server-first-1-minute). If it passes, remove the connector and add it again, or reload the page. ChatGPT especially sometimes needs this. |
+| One app is missing some tools the others have (for example Gemini has no `note_write` or `review_list`) | `PC_CLIENT_SCOPE_POLICY` gives that app fewer permissions. An app that matches no entry gets read-only tools. Use `{"*":["*"]}` to give every app everything, push the settings, redeploy, then remove and re-add the connector. |
 | Grok won't accept the address | Grok needs a paid plan; also make sure the address ends in `/mcp`. |
 | Gemini has no *Custom apps for Spark* section | Custom apps need **Google AI Pro or Ultra**; Plus and free don't include them. Use [guide 11](11-gemini-without-custom-apps.md) instead. Also a personal (not work or school) Google account, Keep Activity on, a US English account, and a computer browser. |
 | The app never uses it on its own | Check the custom instruction is saved, or just ask explicitly: "check my personal context". |

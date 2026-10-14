@@ -25,7 +25,9 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True},
     )
     async def review_list(
-        limit: Annotated[int, Field(ge=1, le=100)] = 25,
+        limit: Annotated[
+            int, Field(ge=1, le=100, description="Maximum review items to return.")
+        ] = 25,
         object_type: Annotated[
             str | None,
             Field(description="conversation, artifact, note or list_candidate."),
@@ -48,7 +50,9 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.REVIEW),
         annotations={"readOnlyHint": True},
     )
-    async def review_get(review_id: UUID) -> dict:
+    async def review_get(
+        review_id: Annotated[UUID, Field(description="The review item's id, from review_list.")],
+    ) -> dict:
         """One review item with the classifier's full answer set and probabilities."""
         return await get_services().review.get(review_id)
 
@@ -58,7 +62,7 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.REVIEW),
     )
     async def review_approve(
-        review_id: UUID,
+        review_id: Annotated[UUID, Field(description="The review item's id, from review_list.")],
         note: Annotated[str | None, Field(description="Why, for the audit trail.")] = None,
     ) -> dict:
         """Accept the suggested routing and close the item."""
@@ -81,7 +85,7 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.REVIEW),
     )
     async def review_reclassify(
-        review_id: UUID,
+        review_id: Annotated[UUID, Field(description="The review item's id, from review_list.")],
         project: Annotated[str | None, Field(description="Correct project slug or name.")] = None,
         destination: Annotated[
             str | None,
@@ -133,7 +137,7 @@ def register(mcp: FastMCP) -> None:
         auth=require_scopes(scopes.REVIEW),
     )
     async def review_dismiss(
-        review_id: UUID,
+        review_id: Annotated[UUID, Field(description="The review item's id, from review_list.")],
         note: Annotated[str | None, Field(description="Why it needs no action.")] = None,
     ) -> dict:
         """Close a review item without changing anything.

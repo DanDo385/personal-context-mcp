@@ -9,7 +9,8 @@ Route map:
     /                      service identity only; no personal data
     /healthz               liveness
     /readyz                readiness (checks the database)
-    /mcp[/<server-id>]     the MCP endpoint, authenticated
+    /mcp[/<server-id>]     the MCP endpoint, authenticated (a trailing slash
+                           is served too, not redirected)
     /.well-known/*         OAuth metadata, added by the auth provider
     /worker/*              local sync worker, shared-secret authenticated
     /artifacts/{up,down}   local storage backend only
@@ -17,10 +18,15 @@ Route map:
 
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
+import json
 import secrets
+import time
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import parse_qsl, unquote, urlencode
 
 from fastmcp import FastMCP
 from starlette.applications import Starlette
@@ -148,6 +154,218 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             request_id_var.reset(token)
+
+
+class BasicClientIdMiddleware:
+    """Accept a client_id sent only in an HTTP Basic header at /token and /revoke.
+
+    RFC 6749 section 2.3.1 lets a client authenticate with Basic and leave
+    client_id out of the form body. The MCP SDK reads client_id from the body
+    only, and FastMCP stores every registered client as public, so such a
+    client got "invalid_client: Missing client_id" and could never finish
+    linking. Copying the id into the body loses nothing: these clients are
+    public, PKCE protects the code, and the secret was never checked.
+    """
+
+    #: OAuth form posts are a few hundred bytes; a bigger one is passed on as is.
+    _MAX_BODY = 64 * 1024
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    @staticmethod
+    def _basic_client_id(scope: Any) -> str | None:
+        for name, value in scope.get("headers", []):
+            if name.lower() != b"authorization":
+                continue
+            scheme, _, encoded = value.decode("latin-1").partition(" ")
+            if scheme.lower() != "basic":
+                return None
+            try:
+                decoded = base64.b64decode(encoded.strip(), validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                return None
+            client_id, sep, _ = decoded.partition(":")
+            return unquote(client_id) if sep and client_id else None
+        return None
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if (
+            scope["type"] != "http"
+            or scope["method"] != "POST"
+            or scope["path"] not in ("/token", "/revoke")
+        ):
+            await self.app(scope, receive, send)
+            return
+        client_id = self._basic_client_id(scope)
+        if client_id is None:
+            await self.app(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                break
+            body.extend(message.get("body", b""))
+            if not message.get("more_body"):
+                break
+
+        fields = parse_qsl(body.decode("latin-1"), keep_blank_values=True)
+        if len(body) <= self._MAX_BODY and not any(k == "client_id" for k, _ in fields):
+            body = bytearray(urlencode([*fields, ("client_id", client_id)]).encode("latin-1"))
+            headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"content-length"]
+            headers.append((b"content-length", str(len(body)).encode()))
+            scope = {**scope, "headers": headers}
+
+        replayed = False
+
+        async def replay() -> Any:
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, replay, send)
+
+
+class PathAliasMiddleware:
+    """Serve the paths clients guess at, instead of redirecting or 404ing.
+
+    ``/mcp/`` would otherwise get a 307 to ``/mcp``. A redirect is a bad
+    answer to an authenticated POST: behind a TLS-terminating proxy its
+    Location can come out as ``http://``, and clients drop the Authorization
+    header when a redirect changes origin. Clients that ignore the
+    ``resource_metadata`` hint in the 401 challenge look for the protected
+    resource metadata at the root ``/.well-known/oauth-protected-resource``;
+    RFC 9728 publishes it under the resource's path, so the root is an alias.
+    Not with PC_SERVER_ID: the root document would name the secret path to
+    anyone who asked.
+    """
+
+    def __init__(self, app: Any, *, mcp_path: str, root_metadata: bool) -> None:
+        self.app = app
+        self.aliases = {f"{mcp_path}/": mcp_path}
+        if root_metadata:
+            self.aliases["/.well-known/oauth-protected-resource"] = (
+                f"/.well-known/oauth-protected-resource{mcp_path}"
+            )
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope["path"] in self.aliases:
+            path = self.aliases[scope["path"]]
+            scope = {**scope, "path": path, "raw_path": path.encode()}
+        await self.app(scope, receive, send)
+
+
+#: Bodies above this are not parsed for the request log; they are still served.
+_LOGGED_BODY_LIMIT = 256 * 1024
+_KNOWN_AUTH_SCHEMES = frozenset({"bearer", "basic", "dpop", "negotiate"})
+
+
+def _credential_scheme(credential: str) -> str | None:
+    """The Authorization scheme name, never any part of the credential itself."""
+    if not credential:
+        return None
+    scheme = credential.split(None, 1)[0].lower()
+    return scheme if scheme in _KNOWN_AUTH_SCHEMES else "unrecognized"
+
+
+def _rpc_summary(body: bytes) -> dict[str, Any]:
+    """The JSON-RPC envelope of a request body: method, id and tool name.
+
+    Argument names are logged, never their values: those are the user's
+    memories and messages.
+    """
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return {"rpc_parse_error": True}
+    messages = payload if isinstance(payload, list) else [payload]
+    calls = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        call: dict[str, Any] = {"method": message.get("method"), "id": message.get("id")}
+        params = message.get("params")
+        if isinstance(params, dict):
+            if isinstance(params.get("name"), str):
+                call["tool_name"] = params["name"]
+            if isinstance(params.get("arguments"), dict):
+                call["argument_names"] = sorted(params["arguments"])
+            if isinstance(params.get("protocolVersion"), str):
+                call["protocol_version"] = params["protocolVersion"]
+            client_info = params.get("clientInfo")
+            if isinstance(client_info, dict):
+                call["client_info"] = {
+                    k: client_info.get(k) for k in ("name", "version") if k in client_info
+                }
+        calls.append(call)
+    return {"rpc": calls}
+
+
+class RequestLogMiddleware:
+    """One structured log line per HTTP request, written when it finishes.
+
+    Records path, status, duration, User-Agent, whether a credential was sent
+    and its scheme, and for MCP calls the JSON-RPC envelope. The credential
+    itself is never logged. The raw body is logged only at DEBUG outside
+    production, the same rule as message content everywhere else. The body is
+    observed as the app reads it, never buffered here, so a request refused
+    before it is read (an unauthenticated one) is logged without an envelope.
+
+    Pure ASGI for the same reason as SecurityHeadersMiddleware: the MCP
+    endpoint may stream.
+    """
+
+    def __init__(self, app: Any, *, mcp_path: str, log_bodies: bool) -> None:
+        self.app = app
+        self.mcp_path = mcp_path
+        self.log_bodies = log_bodies
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        started = time.perf_counter()
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        credential = headers.get(b"authorization", b"").decode("latin-1").strip()
+        is_mcp = scope["method"] == "POST" and scope["path"].rstrip("/") == self.mcp_path
+        body = bytearray()
+        status = 0
+
+        async def receive_wrapper() -> Any:
+            message = await receive()
+            if message["type"] == "http.request" and len(body) < _LOGGED_BODY_LIMIT:
+                body.extend(message.get("body", b""))
+            return message
+
+        async def send_wrapper(message: Any) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive_wrapper if is_mcp else receive, send_wrapper)
+        finally:
+            fields: dict[str, Any] = {
+                "http_method": scope["method"],
+                "path": scope["path"],
+                "status": status or 500,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                "user_agent": headers.get(b"user-agent", b"").decode("latin-1")[:300],
+                "credential_scheme": _credential_scheme(credential),
+                "mcp_protocol_version": headers.get(b"mcp-protocol-version", b"").decode("latin-1")
+                or None,
+            }
+            if is_mcp and body and len(body) < _LOGGED_BODY_LIMIT:
+                fields.update(_rpc_summary(bytes(body)))
+                if self.log_bodies:
+                    fields["rpc_body"] = body.decode("utf-8", "replace")
+            logger.info("http request", extra=fields)
 
 
 def _verified_key(request: Request, store: LocalObjectStore) -> tuple[str, str] | None:
@@ -292,6 +510,10 @@ def create_app(settings: Settings | None = None) -> Starlette:
     mcp_app = mcp.http_app(
         path=settings.mcp_path,
         stateless_http=True,  # Cloud Run scales to zero; no sticky sessions.
+        # One JSON body per POST. Stateless mode has no server-to-client
+        # stream to keep open, and a JSON reply only needs the client to
+        # accept application/json, not also text/event-stream.
+        json_response=True,
         allowed_hosts=settings.allowed_hosts or None,
     )
 
@@ -328,6 +550,17 @@ def create_app(settings: Settings | None = None) -> Starlette:
 
     middleware = [
         Middleware(SecurityHeadersMiddleware),
+        Middleware(
+            RequestLogMiddleware,
+            mcp_path=settings.mcp_path,
+            log_bodies=not settings.is_prod and settings.log_level.upper() == "DEBUG",
+        ),
+        Middleware(
+            PathAliasMiddleware,
+            mcp_path=settings.mcp_path,
+            root_metadata=not settings.server_id,
+        ),
+        Middleware(BasicClientIdMiddleware),
         Middleware(
             CORSMiddleware,
             # MCP clients are server-side; no browser origin needs to read

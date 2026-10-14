@@ -58,7 +58,7 @@ def register(mcp: FastMCP) -> None:
     )
     async def context_search(
         query: Annotated[str, Field(description="What to look for, in natural language.")],
-        limit: Annotated[int, Field(ge=1, le=20)] = 5,
+        limit: Annotated[int, Field(ge=1, le=20, description="Maximum results to return.")] = 5,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         provider: Annotated[
             str | None,
@@ -87,7 +87,7 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False},
     )
     async def context_recent(
-        limit: Annotated[int, Field(ge=1, le=20)] = 5,
+        limit: Annotated[int, Field(ge=1, le=20, description="Maximum results to return.")] = 5,
         provider: Annotated[str | None, Field(description="Filter by provider.")] = None,
         project: Annotated[str | None, Field(description="Filter by project.")] = None,
     ) -> list[dict[str, Any]]:
@@ -104,7 +104,14 @@ def register(mcp: FastMCP) -> None:
     )
     async def context_for_topic(
         topic: Annotated[str, Field(description="The topic to assemble context about.")],
-        token_budget: Annotated[int, Field(ge=200, le=4000)] = 1200,
+        token_budget: Annotated[
+            int,
+            Field(
+                ge=200,
+                le=4000,
+                description="Approximate size of the answer in tokens. Raise it for broad topics.",
+            ),
+        ] = 1200,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
     ) -> dict[str, Any]:
         """Budgeted package about one topic. Prefer this over include_messages."""

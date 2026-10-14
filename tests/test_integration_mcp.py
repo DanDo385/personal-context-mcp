@@ -48,6 +48,40 @@ async def test_client_can_list_the_full_tool_surface(mcp_client) -> None:
     } <= tools
 
 
+async def test_probe_handshake_passes_with_zero_schema_failures(services, live_server) -> None:
+    """initialize, tools/list with every schema checked, and the read-only calls."""
+    import asyncio
+
+    from personal_context_mcp.probe import run_probe
+
+    lines: list[str] = []
+    report = await asyncio.to_thread(
+        run_probe,
+        f"{live_server.base_url}{live_server.mcp_path}",
+        token="test-token",
+        oauth=False,
+        echo=lines.append,
+    )
+    assert report.failures == []
+    assert "schema validation failures: 0" in lines
+
+
+async def test_json_only_accept_header_is_served(services, live_server) -> None:
+    """Clients that accept only application/json get a JSON reply, not 406."""
+    import httpx
+
+    async with httpx.AsyncClient() as http:
+        for path in (live_server.mcp_path, f"{live_server.mcp_path}/"):
+            response = await http.post(
+                f"{live_server.base_url}{path}",
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                headers={"authorization": "Bearer test-token", "accept": "application/json"},
+            )
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("application/json")
+            assert response.json()["result"]["tools"]
+
+
 async def test_tool_descriptions_tell_the_model_when_not_to_call(mcp_client) -> None:
     tools = {t.name: t for t in await mcp_client.list_tools()}
     bootstrap = tools["context_bootstrap"].description or ""

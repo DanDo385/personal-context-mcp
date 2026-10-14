@@ -30,7 +30,7 @@ def register(mcp: FastMCP) -> None:
         query: Annotated[
             str, Field(description="Words from the list name. Empty returns every list.")
         ] = "",
-        limit: Annotated[int, Field(ge=1, le=100)] = 20,
+        limit: Annotated[int, Field(ge=1, le=100, description="Maximum results to return.")] = 20,
     ) -> list[dict]:
         """Find existing lists before creating one. A near-duplicate splits a list."""
         records = await get_services().lists.search(query, limit=limit)
@@ -48,7 +48,7 @@ def register(mcp: FastMCP) -> None:
             str | None,
             Field(description="open, done, dropped, blocked, or null for all."),
         ] = "open",
-        limit: Annotated[int, Field(ge=1, le=100)] = 40,
+        limit: Annotated[int, Field(ge=1, le=100, description="Maximum items to return.")] = 40,
         detail: Annotated[
             Detail,
             Field(description="compact drops nulls and timestamps. full returns every field."),
@@ -116,8 +116,17 @@ def register(mcp: FastMCP) -> None:
         list: Annotated[str, Field(description="List slug or name. Must already exist.")],
         text: Annotated[str, Field(description="The item, as the user would read it.")],
         notes: Annotated[str | None, Field(description="Extra detail.")] = None,
-        priority: Annotated[int, Field(ge=0, le=5)] = 0,
-        due_date: date | None = None,
+        priority: Annotated[
+            int,
+            Field(
+                ge=0,
+                le=5,
+                description="0 (none) to 5 (most urgent). Leave at 0 unless the user gave a priority.",
+            ),
+        ] = 0,
+        due_date: Annotated[
+            date | None, Field(description="Due date as YYYY-MM-DD, only if the user gave one.")
+        ] = None,
     ) -> dict:
         """Add one item. Matching text updates the existing item instead of duplicating."""
         services = get_services()
@@ -152,11 +161,19 @@ def register(mcp: FastMCP) -> None:
     )
     async def list_update_item(
         item_id: Annotated[UUID, Field(description="Item id from list_get.")],
-        text: str | None = None,
+        text: Annotated[
+            str | None, Field(description="Replacement item text. Omit to keep it.")
+        ] = None,
         status: Annotated[str | None, Field(description="open, done, dropped or blocked.")] = None,
-        priority: Annotated[int | None, Field(ge=0, le=5)] = None,
-        due_date: date | None = None,
-        notes: str | None = None,
+        priority: Annotated[
+            int | None, Field(ge=0, le=5, description="New priority, 0 to 5. Omit to keep it.")
+        ] = None,
+        due_date: Annotated[
+            date | None, Field(description="New due date as YYYY-MM-DD. Omit to keep it.")
+        ] = None,
+        notes: Annotated[
+            str | None, Field(description="Replacement notes. Omit to keep them.")
+        ] = None,
     ) -> dict:
         """Change one item. Only supplied fields are altered."""
         services = get_services()
@@ -255,7 +272,7 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True},
     )
     async def list_recent(
-        limit: Annotated[int, Field(ge=1, le=50)] = 15,
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum results to return.")] = 15,
     ) -> list[dict]:
         """Recently changed items across every list."""
         items = await get_services().lists.recent_items(limit=limit)
@@ -269,7 +286,7 @@ def register(mcp: FastMCP) -> None:
     )
     async def list_find_item(
         query: Annotated[str, Field(description="Words from the item.")],
-        limit: Annotated[int, Field(ge=1, le=30)] = 10,
+        limit: Annotated[int, Field(ge=1, le=30, description="Maximum results to return.")] = 10,
         status: Annotated[str | None, Field(description="Filter by status.")] = None,
         include_archived: Annotated[
             bool, Field(description="Also search items in archived lists.")

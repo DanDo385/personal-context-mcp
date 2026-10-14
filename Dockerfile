@@ -36,10 +36,16 @@ COPY --chown=app:app src/ ./src/
 COPY --chown=app:app migrations/ ./migrations/
 COPY --chown=app:app skills/ ./skills/
 
+# HTTPS ends at the platform's proxy (Cloud Run, Fly.io, Railway, Caddy...),
+# which forwards plain HTTP to this port. Trust its X-Forwarded-Proto/Host so
+# anything the server builds from the request says https. Nothing here keys on
+# the client address, so a forged header gains nothing; do not publish this
+# port to the internet without that proxy in front.
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PC_PORT=8080
+    PC_PORT=8080 \
+    FORWARDED_ALLOW_IPS="*"
 
 USER app
 EXPOSE 8080
