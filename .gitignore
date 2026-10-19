@@ -44,4 +44,5 @@ _uv/
 deploy/local.env
 deploy/*.env.op
 !deploy/*.env.op.example
+.1password/
 .env.production
