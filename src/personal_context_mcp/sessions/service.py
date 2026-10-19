@@ -41,6 +41,7 @@ from personal_context_mcp.notes.service import NoteService
 from personal_context_mcp.obsidian.paths import VaultPaths
 from personal_context_mcp.obsidian.queue import SyncQueue
 from personal_context_mcp.projects.service import ProjectService
+from personal_context_mcp.retrieval import inference
 from personal_context_mcp.util import sha256_text, truncate_for_budget, utcnow
 
 logger = get_logger(__name__)
@@ -195,6 +196,7 @@ class SessionService:
         provider_conversation_id: str | None = None,
         title: str | None = None,
         summary: str | None = None,
+        project: str | None = None,
         decisions: list[CheckpointDecision] | None = None,
         facts: list[CheckpointFact] | None = None,
         tasks: list[CheckpointTask] | None = None,
@@ -226,10 +228,21 @@ class SessionService:
                 bucket[key] = bucket.get(key, 0) + n
 
         # ---- 1. classify first, so routing informs what we write ---------
-        stated_project = next(
+        # A project the caller names outright decides where the session goes.
+        # It is matched like a search filter (slug, name, alias, near
+        # misspelling) and never creates a project.
+        explicit = await self._match_project(project) if project and project.strip() else None
+        if project and project.strip() and explicit is None:
+            notes_out.append(
+                f"No project matches {project!r}; the session was saved without one. "
+                "Call project_list to see the existing projects."
+            )
+        stated_reference = next(
             (u.project for u in project_updates if u.project),
             next((d.project for d in decisions if d.project), None),
         )
+        stated = await self._match_project(stated_reference) if stated_reference else None
+        stated_project = explicit.slug if explicit else stated.slug if stated else stated_reference
         state = self._checkpoint_state(
             provider=provider,
             title=title,
@@ -248,9 +261,9 @@ class SessionService:
 
         # ---- 2. everything else in one transaction ----------------------
         async with self._db.transaction() as conn:
-            routed_project_id = (
-                await self._projects.resolve(routing.project_slug) if routing.project_slug else None
-            )
+            routed_project_id = explicit.id if explicit else None
+            if routed_project_id is None and routing.project_slug:
+                routed_project_id = await self._projects.resolve(routing.project_slug)
             conversation_id, conv_created = await self.ensure_conversation(
                 provider=provider,
                 provider_conversation_id=provider_conversation_id,
@@ -293,7 +306,9 @@ class SessionService:
 
             if routed_project_id:
                 await conn.execute(
-                    "UPDATE conversations SET project_id = coalesce(project_id, $2) WHERE id = $1",
+                    "UPDATE conversations SET project_id = coalesce(project_id, $2) WHERE id = $1"
+                    if explicit is None
+                    else "UPDATE conversations SET project_id = $2 WHERE id = $1",
                     conversation_id,
                     routed_project_id,
                 )
@@ -541,6 +556,15 @@ class SessionService:
         )
 
     # ---------------------------------------------------------- internals
+
+    async def _match_project(self, reference: str) -> inference.ProjectRow | None:
+        rows = await self._db.fetch(
+            "SELECT id, slug, name, status, metadata FROM projects ORDER BY last_active_at DESC"
+        )
+        match = inference.resolve_reference(
+            reference, [inference.ProjectRow.from_record(r) for r in rows]
+        )
+        return match.project if match else None
 
     def _checkpoint_state(
         self,

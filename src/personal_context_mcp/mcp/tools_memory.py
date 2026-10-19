@@ -199,6 +199,16 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = None,
+        project: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "The project this session was about (slug or name), when there is "
+                    "one. Without it the session is often saved with no project and "
+                    "never shows up in that project's handoff."
+                )
+            ),
+        ] = None,
         decisions: Annotated[
             list[CheckpointDecision],
             Field(description="Decisions made in this conversation. Empty when none were made."),
@@ -261,6 +271,7 @@ def register(mcp: FastMCP) -> None:
             provider_conversation_id=provider_conversation_id,
             title=title,
             summary=summary,
+            project=project,
             decisions=decisions,
             facts=facts,
             tasks=tasks,
