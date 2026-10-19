@@ -8,7 +8,7 @@ winner.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, get_args
 from uuid import UUID
 
 import asyncpg
@@ -16,9 +16,11 @@ import asyncpg
 from personal_context_mcp.db.pool import Database
 from personal_context_mcp.embeddings.service import EmbeddingService
 from personal_context_mcp.errors import NotFoundError
-from personal_context_mcp.models import NoteRecord
+from personal_context_mcp.models import NoteClass, NoteRecord
 from personal_context_mcp.obsidian.render import extract_note_body
 from personal_context_mcp.util import sha256_text, slugify
+
+_NOTE_CLASSES = frozenset(get_args(NoteClass))
 
 
 def _record(row: asyncpg.Record, *, include_content: bool = False) -> NoteRecord:
@@ -26,7 +28,9 @@ def _record(row: asyncpg.Record, *, include_content: bool = False) -> NoteRecord
         id=row["id"],
         slug=row["slug"],
         title=row["title"],
-        note_class=row["note_class"],
+        # A stored value outside the vocabulary must not fail a whole search
+        # result; it reads as inbox, where an unsorted note belongs anyway.
+        note_class=row["note_class"] if row["note_class"] in _NOTE_CLASSES else "inbox",
         project=row.get("project_slug"),
         vault_path=row["vault_path"],
         version=row["version"],

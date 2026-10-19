@@ -11,7 +11,7 @@ from pydantic import Field
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.auth.principal import current_principal
 from personal_context_mcp.classifier.policy import Verdict
-from personal_context_mcp.models import NoteRecord, ProjectRecord
+from personal_context_mcp.models import NoteRecord, ProjectRecord, WritableNoteClass
 from personal_context_mcp.services import get_services
 from personal_context_mcp.util import sha256_text
 
@@ -177,7 +177,7 @@ def register(mcp: FastMCP) -> None:
             str | None, Field(description="Only notes in this project (slug or name).")
         ] = None,
         note_class: Annotated[
-            str | None,
+            WritableNoteClass | None,
             Field(description="project, research, wiki, concept, resource, daily or inbox."),
         ] = None,
     ) -> list[NoteRecord]:
@@ -212,7 +212,7 @@ def register(mcp: FastMCP) -> None:
         title: Annotated[str, Field(description="Note title. Reusing a title updates that note.")],
         content: Annotated[str, Field(description="The note body, in Markdown.")],
         note_class: Annotated[
-            str | None,
+            WritableNoteClass | None,
             Field(
                 description=(
                     "Where it belongs: project, research, wiki, concept, resource, "
@@ -254,7 +254,7 @@ def register(mcp: FastMCP) -> None:
         project_id = await services.projects.resolve(project)
 
         classification = None
-        destination = note_class
+        destination: str | None = note_class
         if destination is None:
             state = {
                 "title": title,
