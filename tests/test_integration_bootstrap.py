@@ -53,7 +53,7 @@ def _layer(package: dict[str, Any], name: str) -> dict[str, Any]:
 async def test_problem_1_handoff_comes_first_with_open_questions(world) -> None:
     client, seeded = world
     package = await _bootstrap(
-        client, project="harbor-notes", query="open source", token_budget=1200
+        client, project="harbor-notes", query="open source", token_budget=1600
     )
     keys = _keys(package, seeded)
 
@@ -62,12 +62,13 @@ async def test_problem_1_handoff_comes_first_with_open_questions(world) -> None:
         k for k, i in zip(keys, package["items"], strict=True) if i.get("layer") == "handoff"
     ]
     assert {"s_hn_untagged", "s_hn_sync", "s_hn_opensource"} <= set(handoff)
-    assert {"t_hn_guide", "t_hn_tomb", "d_hn_render"} <= set(handoff)
+    assert {"t_hn_guide", "t_hn_tomb"} <= set(handoff)
+    assert handoff.index("d_hn_alone") < handoff.index("d_hn_merge")  # matches the query
     assert keys.index("s_hn_untagged") < keys.index("s_hn_sync")  # newest first
     sync = package["items"][keys.index("s_hn_sync")]
     assert sync["open_questions"] == ["Should deleted paragraphs leave a tombstone?"]
     assert sync["provenance"]["provider"] == "claude"
-    assert sync["effective_at"]
+    assert sync["provenance"]["recorded_at"]
     assert "t_hn_host" not in keys  # done tasks are not open tasks
 
     # Which layers ran, which did not, and why.
@@ -100,11 +101,15 @@ async def test_problem_2_newer_statement_is_flagged_not_hidden(world) -> None:
 
 async def test_problem_3_small_budgets_still_get_the_handoff(world) -> None:
     client, seeded = world
+    # The budget covers the whole result as sent, ids and all. 200 fits one
+    # handoff item; from 400 the newest session leads.
     for budget in (200, 400, 600):
         package = await _bootstrap(client, project="harbor-notes", token_budget=budget)
         keys = _keys(package, seeded)
         assert keys, budget
-        assert keys[0] == "s_hn_untagged", budget  # the newest session comes first
+        assert package["layers_used"] == ["handoff"], budget
+        if budget >= 400:
+            assert keys[0] == "s_hn_untagged", budget  # the newest session comes first
         assert package["estimated_tokens"] <= budget
 
 
@@ -112,7 +117,7 @@ async def test_problem_4_untagged_sessions_reach_the_handoff(world) -> None:
     client, seeded = world
     package = await _bootstrap(client, project="harbor-notes")
     item = next(i for i in package["items"] if seeded.key_for(i["id"]) == "s_hn_untagged")
-    assert "no project" in item["reason"]
+    assert "untagged" in item["reason"]
 
     # A checkpoint that names its project is saved under it.
     await client.call_tool(
@@ -129,7 +134,8 @@ async def test_problem_4_untagged_sessions_reach_the_handoff(world) -> None:
     package = await _bootstrap(client, project="harbor-notes")
     first = package["items"][0]
     assert first["title"] == "Tombstone design"
-    assert first["project"] == "harbor-notes"
+    assert package["project"]["slug"] == "harbor-notes"
+    assert "project" not in first  # the package names it once
     assert first["open_questions"] == ["Should tombstones sync to phones?"]
 
 

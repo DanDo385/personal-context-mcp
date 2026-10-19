@@ -104,11 +104,13 @@ class ContextItem(Base):
     project: str | None = None
     provenance: Provenance_
     estimated_tokens: int = 0
-    #: When it was decided, or last updated. Recency is ranked on this.
-    effective_at: datetime | None = None
+    #: When it was decided, or last updated. Ranking uses it; on the wire it
+    #: is provenance.recorded_at, so it is not sent twice.
+    effective_at: datetime | None = Field(default=None, exclude=True)
     #: Which bootstrap layer returned it: handoff, relevant or raw.
     layer: str | None = None
-    #: Decisions: "active", or "superseded" with the id that replaced it.
+    #: "superseded" (with the id that replaced it) for a decision that was
+    #: replaced. Absent for live items.
     status: str | None = None
     superseded_by: UUID | None = None
     #: Newer items on the same subject that may overrule this one. Ask the user.
@@ -140,8 +142,9 @@ class ProjectChoice(Base):
 class LayerReport(Base):
     name: str
     status: Literal["ran", "skipped"]
-    reason: str
-    items: int = 0
+    #: Why a layer was skipped, or anything notable about how it ran.
+    reason: str | None = None
+    items: int | None = None
 
 
 class ConflictReport(Base):
@@ -150,8 +153,8 @@ class ConflictReport(Base):
     kind: Literal["superseded", "possible_conflict"]
     #: Older first, newer second.
     ids: list[UUID]
-    older: str
-    newer: str
+    #: The newer item's text, only when it is not already among the items.
+    newer: str | None = None
     newer_provenance: str
     advice: str
 

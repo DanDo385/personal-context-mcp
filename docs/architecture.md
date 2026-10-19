@@ -286,6 +286,15 @@ decision, both are marked in `conflicts_with` and the pair is listed in
 stands, so the package says to ask the user; it never silently returns only
 the older one.
 
+`token_budget` covers the whole result as sent, ids, dates and provenance
+included, not only the item text: the finished package is measured and, if it
+is over, the least important items are dropped first (raw excerpts, then extra
+relevant items, then older handoff items; a decision and the newer item that
+may overrule it are kept or dropped together). Items leave out the project
+when the package already names it, and a conversation id except on session
+summaries. Below 400 tokens they also leave out the summaries' conversation
+ids, and the layer report lists only layers that contributed nothing.
+
 Its text result is one line: how many items, and how many tokens they used
 against the budget. The package is the structured result.
 

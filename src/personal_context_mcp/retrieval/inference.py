@@ -103,16 +103,16 @@ def resolve_reference(reference: str, projects: list[ProjectRow]) -> Match | Non
     words = tuple(_words(ref))
     for p in projects:
         if lowered == str(p.id) or lowered == p.slug or lowered == p.name.lower():
-            return Match(p, 1.0, f"matches the project {p.slug!r}")
+            return Match(p, 1.0, "exact match")
     for p in projects:
         if words and words in p.spellings():
-            return Match(p, 0.97, f"{ref!r} is a name or alias of {p.slug!r}")
+            return Match(p, 0.97, f"alias {ref!r}")
     best: Match | None = None
     for p in projects:
         for spelling in p.spellings():
             ratio = SequenceMatcher(None, " ".join(words), " ".join(spelling)).ratio()
             if ratio >= 0.8 and (best is None or ratio > best.score):
-                best = Match(p, ratio, f"{ref!r} looks like a misspelling of {p.slug!r}")
+                best = Match(p, ratio, f"close spelling {ref!r}")
     return best
 
 

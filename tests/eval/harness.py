@@ -219,6 +219,13 @@ def score(
         if got_kind != kind:
             failures.append(f"{k} provenance {got_kind}, wanted {kind}")
 
+    if case["tool"] == "bootstrap":
+        budget = case["args"].get("token_budget", 1200)
+        wire = int(answer.raw_size / 3.6) + 1
+        # The budget is the caller's ceiling for the whole result, not just text.
+        if wire > budget * 1.15:
+            failures.append(f"wire size {wire} tokens is over the {budget} budget")
+
     if expect.get("max_tokens") is not None:
         estimated = answer.package.get("estimated_tokens", 0)
         if estimated > expect["max_tokens"]:

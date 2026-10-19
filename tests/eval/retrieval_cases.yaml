@@ -207,7 +207,7 @@ cases:
   - id: handoff-explicit-project
     category: handoff
     tool: bootstrap
-    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 1200}
+    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 1600}
     expect:
       project: harbor-notes
       include: [s_hn_untagged, s_hn_sync, s_hn_opensource, t_hn_guide, t_hn_tomb, d_hn_render, d_hn_postgres]
@@ -253,8 +253,14 @@ cases:
   - id: tight-budget
     category: budget
     tool: bootstrap
-    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 200}
-    expect: {include_any: [s_hn_untagged, s_hn_sync], max_tokens: 200}
+    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 400}
+    expect: {first: s_hn_untagged, max_tokens: 400}
+
+  - id: smallest-budget
+    category: budget
+    tool: bootstrap
+    args: {project: "harbor-notes", token_budget: 200}
+    expect: {include_any: [s_hn_untagged, t_hn_guide, t_hn_tomb, d_hn_render], max_tokens: 200}
 
   - id: unrelated-question
     category: no-result

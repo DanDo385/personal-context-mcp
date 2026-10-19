@@ -25,6 +25,7 @@ statements and some arithmetic.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -53,8 +54,17 @@ from personal_context_mcp.util import estimate_tokens, truncate_for_budget
 
 #: Per-item ceiling so one enormous note cannot eat the whole package.
 _MAX_ITEM_TOKENS = 450
-#: Rough cost of an item's id, type and provenance on the wire, in tokens.
-_ITEM_OVERHEAD = 12
+#: Starting estimate for the package's own fields (project, layers, notes).
+#: The finished package is measured and trimmed to the budget anyway.
+_PACKAGE_OVERHEAD = 110
+#: Below this budget, items leave out fields the package already implies.
+_COMPACT_BELOW = 400
+#: Trim order when the measured package is over budget: highest tier goes first.
+_TIER_CORE = 0
+_TIER_RELEVANT_TOP = 1
+_TIER_HANDOFF_REST = 2
+_TIER_RELEVANT_REST = 3
+_TIER_RAW = 4
 
 #: Who said it. The user's own words outrank a model's conclusions; text
 #: lifted from imported chats (titles, transcript openings) ranks lowest.
@@ -109,6 +119,8 @@ def _item(
     trimmed = truncate_for_budget(content.strip(), max_tokens)
     questions = [str(q) for q in (_get(row, "open_questions") or []) if str(q).strip()]
     status = _get(row, "status")
+    effective = _get(row, "effective_at")
+    recorded = effective or _get(row, "updated_at") or _get(row, "created_at")
     item = ContextItem(
         type=kind,  # type: ignore[arg-type]
         id=row["id"],
@@ -120,14 +132,12 @@ def _item(
             kind=_get(row, "provenance") or provenance_kind,  # type: ignore[arg-type]
             provider=_get(row, "source_provider") or _get(row, "provider"),
             conversation_id=_get(row, "source_conversation_id") or _get(row, "conversation_id"),
-            recorded_at=_get(row, "updated_at")
-            or _get(row, "created_at")
-            or _get(row, "effective_at"),
+            recorded_at=recorded.replace(microsecond=0) if recorded else None,
             confidence=_get(row, "confidence"),
         ),
-        effective_at=_get(row, "effective_at"),
+        effective_at=effective,
         layer=layer,
-        status=status if kind == "decision" else None,
+        status="superseded" if kind == "decision" and status == "superseded" else None,
         superseded_by=_get(row, "superseded_by"),
         open_questions=questions,
         reason=_get(row, "reason"),
@@ -143,9 +153,16 @@ def _get(row: asyncpg.Record | dict[str, Any], key: str) -> Any:
         return None
 
 
+def _wire_tokens(model: ContextItem | ContextPackage) -> int:
+    """Tokens the object costs as sent: the tool's JSON at 3.6 characters a token."""
+    # Imported here: the mcp package imports the tools, which import services.
+    from personal_context_mcp.mcp.compact import dump
+
+    return estimate_tokens(json.dumps(dump(model)))
+
+
 def _cost(item: ContextItem) -> int:
-    text = item.content + " " + (item.title or "") + " " + " ".join(item.open_questions)
-    return estimate_tokens(text) + _ITEM_OVERHEAD
+    return _wire_tokens(item)
 
 
 # --------------------------------------------------------------- the SQL
@@ -576,17 +593,14 @@ class RetrievalService:
                 report = ConflictReport(
                     kind="superseded",
                     ids=[item.id, item.superseded_by],
-                    older=item.content[:200],
-                    newer=(by_id[item.superseded_by].content[:200])
-                    if item.superseded_by in by_id
-                    else "a newer decision (see superseded_by)",
+                    newer=None if item.superseded_by in by_id else "see superseded_by",
                     newer_provenance="user_statement",
-                    advice="The older decision was replaced. Use the newer one.",
+                    advice="Replaced; use the newer decision.",
                 )
                 if reports is not None and report not in reports:
                     reports.append(report)
 
-        decision_ids = [i.id for i in items if i.type == "decision" and i.status == "active"]
+        decision_ids = [i.id for i in items if i.type == "decision" and i.status != "superseded"]
         if not decision_ids:
             return
         rows = await self._db.fetch(_CONFLICT_SQL, decision_ids)
@@ -606,24 +620,13 @@ class RetrievalService:
             if newer is not None and older.id not in newer.conflicts_with:
                 newer.conflicts_with.append(older.id)
             if reports is not None:
-                who = (
-                    "the user"
-                    if row["provenance"] == "user_statement"
-                    else "an assistant"
-                    if row["provenance"] == "assistant_generated"
-                    else row["provenance"]
-                )
                 reports.append(
                     ConflictReport(
                         kind="possible_conflict",
                         ids=[older.id, row["id"]],
-                        older=older.content[:200],
-                        newer=truncate_for_budget(row["body"], 60),
+                        newer=None if newer is not None else truncate_for_budget(row["body"], 40),
                         newer_provenance=row["provenance"],
-                        advice=(
-                            f"A newer {row['kind']} from {who} touches the same subject. "
-                            "Do not assume either one wins; ask the user which stands."
-                        ),
+                        advice=f"Newer {row['kind']} on the same subject; ask the user which stands.",
                     )
                 )
 
@@ -678,8 +681,7 @@ class RetrievalService:
         notes: list[str] = []
         if user_message and not (query and query.strip()):
             notes.append(
-                "user_message is deprecated: pass a short `query` of key terms instead. "
-                "This one was reduced to its key terms."
+                "user_message is deprecated; pass query (key terms). Reduced to key terms."
             )
         return await self._build_package(
             query=text,
@@ -700,7 +702,7 @@ class RetrievalService:
     ) -> ContextPackage:
         notes = list(notes or [])
         parsed = parse(query)
-        budget = _Budget(token_budget)
+        budget = _Budget(token_budget, spent=_PACKAGE_OVERHEAD)
         item_cap = max(60, min(_MAX_ITEM_TOKENS, token_budget // 4))
         chosen: list[ContextItem] = []
         seen: set[UUID] = set()
@@ -708,17 +710,33 @@ class RetrievalService:
         conflicts: list[ConflictReport] = []
         left_out = 0
 
+        tiers: dict[UUID, int] = {}
+        compact = token_budget < _COMPACT_BELOW
+
         def take(items: list[ContextItem], layer: str, ceiling: int | None = None) -> int:
             """Add what fits; skip what does not and keep going. Returns count added."""
             nonlocal left_out
             added = 0
-            for item in items:
+            for position, item in enumerate(items):
                 if item.id in seen:
                     continue
+                # The package names the project once; a conversation id is kept
+                # where it leads somewhere (a session's transcript).
+                if focus is not None and item.project == focus.slug:
+                    item.project = None
+                if compact or item.type != "summary":
+                    item.provenance.conversation_id = None
+                item.estimated_tokens = _cost(item)
                 if not budget.fits(item.estimated_tokens, ceiling):
                     left_out += 1
                     continue
                 item.layer = layer
+                if layer == "raw":
+                    tiers[item.id] = _TIER_RAW
+                elif layer == "handoff":
+                    tiers[item.id] = _TIER_CORE if position < 7 else _TIER_HANDOFF_REST
+                else:
+                    tiers[item.id] = _TIER_RELEVANT_TOP if position < 3 else _TIER_RELEVANT_REST
                 chosen.append(item)
                 seen.add(item.id)
                 budget.take(item.estimated_tokens)
@@ -736,28 +754,20 @@ class RetrievalService:
                 LayerReport(name="handoff", status="skipped", reason="topic packages skip it")
             )
         elif focus is None and not candidates:
-            layers.append(
-                LayerReport(
-                    name="handoff", status="skipped", reason="no project was given or inferred"
-                )
-            )
+            layers.append(LayerReport(name="handoff", status="skipped", reason="no project"))
         else:
             targets = [focus] if focus else candidates[:2]
             short = focus is None
             share = 1.0 if parsed.is_empty else 0.7
             for target in targets:
                 ceiling = budget.spent + int(token_budget * share / len(targets))
-                items = await self._handoff(target, short=short, item_cap=item_cap)
+                items = await self._handoff(target, short=short, item_cap=item_cap, parsed=parsed)
                 handoff_items += take(items, "handoff", ceiling)
             layers.append(
                 LayerReport(
                     name="handoff",
                     status="ran",
-                    reason=(
-                        f"latest sessions, open tasks and active decisions for {targets[0].slug!r}"
-                        if focus
-                        else "short handoffs for each candidate project"
-                    ),
+                    reason=None if focus else "short handoff per candidate project",
                     items=handoff_items,
                 )
             )
@@ -769,7 +779,7 @@ class RetrievalService:
                 LayerReport(
                     name="relevant",
                     status="skipped",
-                    reason="the query had no searchable terms after dropping filler words",
+                    reason="no query terms",
                 )
             )
         else:
@@ -787,8 +797,6 @@ class RetrievalService:
                 LayerReport(
                     name="relevant",
                     status="ran",
-                    reason="ranked by text match, who said it and recency"
-                    + (f", within {focus.slug!r} and items with no project" if focus else ""),
                     items=relevant,
                 )
             )
@@ -799,12 +807,12 @@ class RetrievalService:
                 LayerReport(
                     name="raw_messages",
                     status="skipped",
-                    reason="the layers above found something",
+                    reason="not needed",
                 )
             )
         elif parsed.is_empty:
             layers.append(
-                LayerReport(name="raw_messages", status="skipped", reason="nothing to search for")
+                LayerReport(name="raw_messages", status="skipped", reason="no query terms")
             )
         else:
             raw = await self._search(
@@ -828,7 +836,6 @@ class RetrievalService:
                 LayerReport(
                     name="raw_messages",
                     status="ran",
-                    reason="nothing structured matched",
                     items=added,
                 )
             )
@@ -836,7 +843,7 @@ class RetrievalService:
         await self._flag_conflicts(chosen, conflicts)
 
         if left_out:
-            notes.append(f"{left_out} more items did not fit; raise token_budget to see them.")
+            notes.append(f"{left_out} more items did not fit token_budget.")
         if not chosen:
             notes.append(_NOTHING_MATCHED)
 
@@ -848,11 +855,16 @@ class RetrievalService:
             if name not in layers_used:
                 layers_used.append(name)
 
-        return ContextPackage(
+        for layer_report in layers:
+            layer_report.items = layer_report.items or None
+        if compact:
+            # layers_used already names the layers that returned items.
+            layers = [r for r in layers if r.status == "skipped" or not r.items]
+        package = ContextPackage(
             query=truncate_for_budget(query, 60),
             items=chosen,
             token_budget=token_budget,
-            estimated_tokens=budget.spent,
+            estimated_tokens=0,
             layers_used=layers_used,
             truncated=left_out > 0,
             notes=notes,
@@ -861,6 +873,35 @@ class RetrievalService:
             layers=layers,
             conflicts=conflicts,
         )
+        # The budget covers the whole result as sent, not just item text.
+        # Measure it, and drop from the end (least important first) until it fits.
+        # A conflict pair is only useful together: both sides get the more
+        # important tier of the two.
+        for report in conflicts:
+            pair = [i for i in report.ids if i in tiers]
+            if len(pair) == 2:
+                tier = min(tiers[pair[0]], tiers[pair[1]])
+                tiers[pair[0]] = tiers[pair[1]] = tier
+        size = _wire_tokens(package)
+        while size > token_budget and package.items:
+            # Least important tier first; within a tier, the last one added.
+            worst = max(
+                range(len(package.items)),
+                key=lambda i: (tiers.get(package.items[i].id, _TIER_RAW), i),
+            )
+            dropped = package.items.pop(worst)
+            kept: list[ConflictReport] = []
+            for report in package.conflicts:
+                if report.ids[0] == dropped.id:
+                    continue  # the older item is gone, so is the warning about it
+                if report.ids[-1] == dropped.id and report.newer is None:
+                    report.newer = truncate_for_budget(dropped.content, 40)
+                kept.append(report)
+            package.conflicts = kept
+            package.truncated = True
+            size = _wire_tokens(package)
+        package.estimated_tokens = size
+        return package
 
     def _choose_project(
         self, project: str | None, text: str, rows: list[inference.ProjectRow]
@@ -919,7 +960,12 @@ class RetrievalService:
         )
 
     async def _handoff(
-        self, project: inference.ProjectRow, *, short: bool, item_cap: int
+        self,
+        project: inference.ProjectRow,
+        *,
+        short: bool,
+        item_cap: int,
+        parsed: ParsedQuery | None = None,
     ) -> list[ContextItem]:
         """Newest summaries, open tasks and active decisions, in reading order."""
         rows = await self._db.fetch(
@@ -944,9 +990,7 @@ class RetrievalService:
                 ]
             data["project_slug"] = project.slug
             if row["kind"] == "summary" and row["untagged"]:
-                data["reason"] = (
-                    f"this session has no project but names {project.name!r}; it may belong to it"
-                )
+                data["reason"] = f"untagged; mentions {project.name}"
             item = _item(
                 kind=row["kind"],
                 row=data,
@@ -958,6 +1002,16 @@ class RetrievalService:
                 item
             )
         summaries.sort(key=lambda i: i.effective_at or _now(), reverse=True)
+        if parsed is not None and parsed.terms:
+            # Within tasks and decisions, the ones that mention the query lead.
+            stems = [t[:5] for t in parsed.terms]
+
+            def mentions(item: ContextItem) -> bool:
+                text = item.content.lower()
+                return any(stem in text for stem in stems)
+
+            tasks.sort(key=lambda i: not mentions(i))
+            decisions.sort(key=lambda i: not mentions(i))
         # Newest session first; then what is open; then what was decided. Older
         # sessions come after, so a tight budget still gets the latest of each.
         ordered = summaries[:1] + tasks[:3] + decisions[:3] + summaries[1:] + tasks[3:]
