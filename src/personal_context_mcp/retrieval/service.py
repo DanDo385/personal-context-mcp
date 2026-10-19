@@ -48,6 +48,7 @@ from personal_context_mcp.models import (
 from personal_context_mcp.projects.service import ProjectService
 from personal_context_mcp.retrieval import inference
 from personal_context_mcp.retrieval.query import ParsedQuery, parse
+from personal_context_mcp.sessions.service import question_key
 from personal_context_mcp.util import estimate_tokens, truncate_for_budget
 
 #: Per-item ceiling so one enormous note cannot eat the whole package.
@@ -340,6 +341,14 @@ SELECT * FROM (
      FROM decisions d
      WHERE d.project_id = $1 AND d.status = 'active'
      ORDER BY d.decided_at DESC LIMIT $5)
+    UNION ALL
+    -- Questions a session of this project marked resolved; hidden from every
+    -- summary's open questions below.
+    (SELECT 'resolved', s.id, NULL, r.q, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false, 0
+     FROM session_summaries s JOIN conversations c ON c.id = s.conversation_id,
+          jsonb_array_elements_text(coalesce(s.metadata->'resolved_questions', '[]'::jsonb))
+            AS r(q)
+     WHERE coalesce(s.project_id, c.project_id) = $1)
 ) h
 """
 
@@ -924,8 +933,15 @@ class RetrievalService:
         summaries: list[ContextItem] = []
         tasks: list[ContextItem] = []
         decisions: list[ContextItem] = []
+        resolved = {question_key(r["body"]) for r in rows if r["kind"] == "resolved"}
         for row in rows:
+            if row["kind"] == "resolved":
+                continue
             data = dict(row)
+            if row["kind"] == "summary" and resolved:
+                data["open_questions"] = [
+                    q for q in row["open_questions"] or [] if question_key(q) not in resolved
+                ]
             data["project_slug"] = project.slug
             if row["kind"] == "summary" and row["untagged"]:
                 data["reason"] = (

@@ -292,6 +292,13 @@ class CheckpointDecision(Base):
     project: str | None = Field(
         default=None, description="Project slug or name this decision belongs to."
     )
+    provenance: Literal["user_statement", "assistant_generated"] = Field(
+        default="user_statement",
+        description=(
+            "user_statement when the user made or confirmed the decision; "
+            "assistant_generated for your own recommendation the user has not confirmed."
+        ),
+    )
 
 
 class CheckpointFact(Base):

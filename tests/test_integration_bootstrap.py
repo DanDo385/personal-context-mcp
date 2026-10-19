@@ -214,3 +214,59 @@ async def test_untagged_session_proposals_are_read_only(db, tmp_path) -> None:
     assert (tmp_path / "proposals.csv").read_text().count("\n") == len(proposals) + 1
     after = await db.fetchval("SELECT count(*) FROM session_summaries WHERE project_id IS NULL")
     assert after == before
+
+
+async def test_open_questions_accumulate_and_resolved_ones_leave_the_handoff(world) -> None:
+    client, seeded = world
+    base = {"provider": "claude", "provider_conversation_id": "q-1", "project": "harbor-notes"}
+    await client.call_tool(
+        "session_checkpoint",
+        {**base, "summary": "First pass.", "open_questions": ["Which license?"]},
+    )
+    # A later checkpoint of the same session with no questions keeps the first one.
+    await client.call_tool("session_checkpoint", {**base, "summary": "Second pass."})
+    package = await _bootstrap(client, project="harbor-notes")
+    assert package["items"][0]["open_questions"] == ["Which license?"]
+
+    # Resolving: one of this session's own questions, and one from an older session.
+    await client.call_tool(
+        "session_checkpoint",
+        {
+            **base,
+            "summary": "Picked the licence and the tombstone rule.",
+            "resolved_questions": [
+                "which license",
+                "Should deleted paragraphs leave a tombstone?",
+            ],
+        },
+    )
+    package = await _bootstrap(client, project="harbor-notes", token_budget=2000)
+    by_key = {seeded.key_for(i["id"]): i for i in package["items"]}
+    assert "open_questions" not in by_key["s_hn_sync"]  # answered in a later session
+    assert "open_questions" not in package["items"][0]
+    remaining = [q for i in package["items"] for q in i.get("open_questions", [])]
+    assert "Is the tokenizer dropping hyphenated words?" in remaining  # untouched
+
+
+async def test_a_recommendation_is_not_recorded_as_the_users_decision(world) -> None:
+    client, _ = world
+    await client.call_tool(
+        "session_checkpoint",
+        {
+            "provider": "claude",
+            "provider_conversation_id": "rec-1",
+            "project": "harbor-notes",
+            "summary": "Compared queue libraries.",
+            "decisions": [
+                {
+                    "statement": "Use a durable job queue for Harbor Notes exports.",
+                    "provenance": "assistant_generated",
+                },
+                {"statement": "Exports run nightly for Harbor Notes."},
+            ],
+        },
+    )
+    found = await client.call_tool("context_search", {"query": "harbor notes exports"})
+    kinds = {i["content"]: i["provenance"]["kind"] for i in found.structured_content["result"]}
+    assert kinds["Use a durable job queue for Harbor Notes exports."] == "assistant_generated"
+    assert kinds["Exports run nightly for Harbor Notes."] == "user_statement"

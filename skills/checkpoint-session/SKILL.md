@@ -57,12 +57,17 @@ real names before referring to them)
      Without it the session is often saved with no project and never appears
      in that project's handoff. An unknown name is reported in `notes`, not
      created.
-   - `decisions` - one sentence each, with rationale if it was discussed
+   - `decisions` - one sentence each, with rationale if it was discussed.
+     `provenance` is `user_statement` when the user made or confirmed it and
+     `assistant_generated` for your own recommendation they have not confirmed
    - `facts` - self-contained, with **accurate** `provenance`
    - `tasks` - concrete unfinished actions
    - `list_updates` - additions and completions on existing lists
    - `project_updates` - status or goal changes
-   - `open_questions` - what is still unresolved
+   - `open_questions` - what is still unresolved. They accumulate across
+     checkpoints of one session
+   - `resolved_questions` - open questions from earlier sessions (shown in the
+     bootstrap handoff) that this conversation answered, copied as shown
    - `artifacts` - ids of artifacts already captured this session
 
 3. **Read the result.** It reports exactly what was created, updated and

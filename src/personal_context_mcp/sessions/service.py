@@ -203,6 +203,7 @@ class SessionService:
         list_updates: list[CheckpointListUpdate] | None = None,
         project_updates: list[CheckpointProjectUpdate] | None = None,
         open_questions: list[str] | None = None,
+        resolved_questions: list[str] | None = None,
         artifacts: list[CheckpointArtifactRef] | None = None,
         important_context: list[str] | None = None,
         model: str | None = None,
@@ -215,6 +216,7 @@ class SessionService:
         list_updates = list_updates or []
         project_updates = project_updates or []
         open_questions = open_questions or []
+        resolved_questions = [q for q in (resolved_questions or []) if q.strip()]
         artifacts = artifacts or []
         important_context = important_context or []
 
@@ -316,6 +318,32 @@ class SessionService:
 
             # -- session summary (layer 2) --------------------------------
             summary_id = None
+            # Open questions and important context accumulate across
+            # checkpoints of one session instead of being replaced by the
+            # latest call. Resolved questions are recorded on this session and
+            # hidden from every handoff of the project when it is read, so an
+            # older session is never edited (which would also make it look new).
+            existing = await conn.fetchrow(
+                """
+                SELECT open_questions, important_context,
+                       coalesce(metadata->'resolved_questions', '[]'::jsonb) AS resolved
+                FROM session_summaries WHERE conversation_id = $1 FOR UPDATE
+                """,
+                conversation_id,
+            )
+            resolved_all = _merge_texts(
+                existing["resolved"] if existing else [], resolved_questions
+            )
+            merged_questions = [
+                q
+                for q in _merge_texts(
+                    existing["open_questions"] if existing else [], open_questions
+                )
+                if question_key(q) not in {question_key(r) for r in resolved_all}
+            ]
+            merged_context = _merge_texts(
+                existing["important_context"] if existing else [], important_context
+            )
             if summary and summary.strip():
                 summary_id, summary_created = await self._upsert_summary(
                     conn,
@@ -324,12 +352,32 @@ class SessionService:
                     project_id=routed_project_id,
                     title=title,
                     summary=summary.strip(),
-                    open_questions=open_questions,
-                    important_context=important_context,
+                    open_questions=merged_questions,
+                    important_context=merged_context,
+                    resolved_questions=resolved_all,
                     sensitivity=sensitivity,
                     needs_review=routing.needs_review,
                 )
                 bump(created if summary_created else updated, "session_summaries")
+            elif existing and (open_questions or resolved_questions or important_context):
+                await conn.execute(
+                    """
+                    UPDATE session_summaries
+                    SET open_questions = $2, important_context = $3,
+                        metadata = metadata || jsonb_build_object('resolved_questions', $4::jsonb)
+                    WHERE conversation_id = $1
+                    """,
+                    conversation_id,
+                    merged_questions,
+                    merged_context,
+                    resolved_all,
+                )
+                bump(updated, "session_summaries")
+            elif open_questions or resolved_questions:
+                notes_out.append(
+                    "Open and resolved questions are kept with the session summary; "
+                    "send a summary so they are saved."
+                )
 
             # -- decisions ------------------------------------------------
             for decision in decisions:
@@ -339,7 +387,7 @@ class SessionService:
                     INSERT INTO decisions (
                         statement, statement_sha256, rationale, project_id,
                         source_provider, source_conversation_id, provenance
-                    ) VALUES ($1,$2,$3,$4,$5,$6,'user_statement'::pc_provenance)
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7::pc_provenance)
                     ON CONFLICT (statement_sha256) DO NOTHING
                     RETURNING id
                     """,
@@ -349,6 +397,7 @@ class SessionService:
                     project_id,
                     provider,
                     conversation_id,
+                    decision.provenance,
                 )
                 bump(created if inserted else skipped, "decisions")
                 # A decision is also durable memory; storing it once in each
@@ -359,7 +408,7 @@ class SessionService:
                         kind="decision",
                         subject=decision.project or routing.project_slug,
                         project_id=project_id,
-                        provenance="user_statement",
+                        provenance=decision.provenance,
                         sensitivity=sensitivity,
                         importance=max(0.7, routing.importance),
                         source_provider=provider,
@@ -611,6 +660,7 @@ class SessionService:
         important_context: list[str],
         sensitivity: str,
         needs_review: bool,
+        resolved_questions: list[str] | None = None,
     ) -> tuple[UUID, bool]:
         embedding = await self._embeddings.embed_one(
             f"{title or ''}\n\n{summary}", sensitivity=sensitivity
@@ -620,9 +670,10 @@ class SessionService:
             INSERT INTO session_summaries (
                 conversation_id, provider, project_id, title, summary, summary_sha256,
                 open_questions, important_context, sensitivity,
-                classification_status, embedding
+                classification_status, embedding, metadata
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::pc_sensitivity,
-                      $10::pc_classification_status,$11)
+                      $10::pc_classification_status,$11,
+                      jsonb_build_object('resolved_questions', $12::jsonb))
             ON CONFLICT (conversation_id) DO UPDATE SET
                 -- A later checkpoint in the same session extends the record
                 -- rather than replacing it, unless the text is identical.
@@ -633,8 +684,10 @@ class SessionService:
                 summary_sha256 = EXCLUDED.summary_sha256,
                 title = coalesce(EXCLUDED.title, session_summaries.title),
                 project_id = coalesce(EXCLUDED.project_id, session_summaries.project_id),
+                -- Already merged with the stored lists by the caller.
                 open_questions = EXCLUDED.open_questions,
                 important_context = EXCLUDED.important_context,
+                metadata = session_summaries.metadata || EXCLUDED.metadata,
                 classification_status = EXCLUDED.classification_status,
                 embedding = coalesce(EXCLUDED.embedding, session_summaries.embedding),
                 version = session_summaries.version + 1,
@@ -652,6 +705,7 @@ class SessionService:
             sensitivity,
             "needs_review" if needs_review else "classified",
             embedding,
+            resolved_questions or [],
         )
         await conn.execute(
             "UPDATE conversations SET summary = $2, updated_at = now() WHERE id = $1",
@@ -793,3 +847,21 @@ class SessionService:
             limit,
         )
         return [dict(r) for r in rows]
+
+
+def question_key(text: str) -> str:
+    """Compare questions loosely: case, spacing and trailing punctuation ignored."""
+    return " ".join(str(text).lower().split()).rstrip("?.!: ")
+
+
+def _merge_texts(existing: list[Any] | None, new: list[str]) -> list[str]:
+    """Union, oldest first, without near-identical repeats."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for text in [*(existing or []), *new]:
+        value = str(text).strip()
+        key = question_key(value)
+        if value and key not in seen:
+            seen.add(key)
+            out.append(value)
+    return out

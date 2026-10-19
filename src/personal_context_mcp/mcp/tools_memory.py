@@ -234,6 +234,15 @@ def register(mcp: FastMCP) -> None:
         open_questions: Annotated[
             list[str], Field(description="Questions raised and left unresolved, one sentence each.")
         ] = [],
+        resolved_questions: Annotated[
+            list[str],
+            Field(
+                description=(
+                    "Open questions from earlier sessions that this conversation answered, "
+                    "copied as the handoff showed them. They stop appearing as open."
+                )
+            ),
+        ] = [],
         artifacts: Annotated[
             list[CheckpointArtifactRef],
             Field(
@@ -278,6 +287,7 @@ def register(mcp: FastMCP) -> None:
             list_updates=list_updates,
             project_updates=project_updates,
             open_questions=open_questions,
+            resolved_questions=resolved_questions,
             artifacts=artifacts,
             important_context=important_context,
             model=model,
