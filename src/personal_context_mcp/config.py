@@ -78,10 +78,17 @@ class Settings(BaseSettings):
     #: auth_mode="static": dev/test only. Maps bearer token -> principal.
     static_tokens: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
 
-    #: Capability scopes granted per OAuth client, by client name substring.
+    #: Capability scopes granted per OAuth client: by exact client id, by app
+    #: (chatgpt, claude, gemini or grok, recognised from the client's redirect
+    #: URIs), or "*" for everything else.
     #: e.g. {"chatgpt": ["context:read", "memory:read"], "*": ["*"]}
     #: See personal_context_mcp/auth/scopes.py for the vocabulary.
     client_scope_policy: Annotated[dict[str, list[str]], NoDecode] = Field(default_factory=dict)
+
+    #: Extra redirect URI patterns an OAuth client may register, on top of the
+    #: built-in ChatGPT, Claude, Gemini and Grok callbacks and loopback (see
+    #: personal_context_mcp/auth/clients.py). e.g. https://vscode.dev/redirect
+    allowed_redirect_uris: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     #: Shared secret the local Obsidian worker uses on /worker/*. Separate
     #: from MCP auth: the worker is our own code, not a model.
@@ -210,6 +217,7 @@ class Settings(BaseSettings):
     @field_validator(
         "allowed_subjects",
         "allowed_hosts",
+        "allowed_redirect_uris",
         "no_external_sensitivity",
         mode="before",
     )

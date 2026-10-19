@@ -9,6 +9,7 @@ from fastmcp.server.auth import AccessToken
 from fastmcp.utilities.authorization import AuthContext, require_scopes
 
 from personal_context_mcp.auth import scopes
+from personal_context_mcp.auth.clients import app_for_redirect_uris
 from personal_context_mcp.auth.provider import _identities, build_auth_provider
 from personal_context_mcp.auth.scopes import (
     ALL_SCOPES,
@@ -47,36 +48,119 @@ def test_unknown_scopes_are_dropped_not_granted() -> None:
 
 
 def test_default_is_read_only() -> None:
-    granted = resolve_client_scopes({}, client_id="new-client", client_name="Something New")
+    granted = resolve_client_scopes({}, client_id="new-client", app=None)
     assert granted == set(DEFAULT_SCOPES)
     assert not any(s.endswith(":write") for s in granted)
 
 
-def test_exact_client_id_wins_over_name_match() -> None:
+def test_exact_client_id_wins_over_app_match() -> None:
     policy = {"abc123": ["memory:read"], "chatgpt": ["*"]}
-    granted = resolve_client_scopes(policy, client_id="abc123", client_name="ChatGPT")
+    granted = resolve_client_scopes(policy, client_id="abc123", app="chatgpt")
     assert granted == {scopes.MEMORY_READ}
 
 
-def test_client_name_substring_match() -> None:
+def test_app_match() -> None:
     policy = {"grok": ["read"], "*": ["*"]}
-    granted = resolve_client_scopes(policy, client_id="xyz", client_name="Grok Connector")
+    granted = resolve_client_scopes(policy, client_id="xyz", app="grok")
     assert granted == set(expand(["read"]))
-
-
-def test_spark_display_names_do_not_receive_gemini_scopes() -> None:
-    """client_name is a registration display name, not a trusted identity."""
-    policy = {"gemini": ["*"]}
-    for name in ("Spark", "SparkNotes", "my spark plugin", "Custom apps for Spark"):
-        granted = resolve_client_scopes(policy, client_id="client-1", client_name=name)
-        assert scopes.MEMORY_WRITE not in granted
-        assert granted == set(DEFAULT_SCOPES)
 
 
 def test_wildcard_default_applies_when_nothing_matches() -> None:
     policy = {"*": ["memory:read", "context:read"]}
-    granted = resolve_client_scopes(policy, client_id="q", client_name="Unknown App")
+    granted = resolve_client_scopes(policy, client_id="q", app=None)
     assert granted == {scopes.MEMORY_READ, scopes.CONTEXT_READ}
+
+
+@pytest.mark.parametrize(
+    ("redirect_uris", "expected"),
+    [
+        (["https://claude.ai/api/mcp/auth_callback"], "claude"),
+        (["https://chatgpt.com/connector_platform_oauth_redirect"], "chatgpt"),
+        (["https://grok.com/connectors-oauth-exchange-code/"], "grok"),
+        (
+            [
+                "https://oauth-redirect.googleusercontent.com/r/x",
+                "https://oauth-redirect-sandbox.googleusercontent.com/a/x",
+            ],
+            "gemini",
+        ),
+        (["http://localhost:53682/callback"], None),
+        (["https://claude.ai/api/mcp/auth_callback", "http://localhost:1/cb"], None),
+        (
+            [
+                "https://claude.ai/api/mcp/auth_callback",
+                "https://grok.com/connectors-oauth-exchange-code/",
+            ],
+            None,
+        ),
+        (["https://claude.ai.attacker.example/api/mcp/auth_callback"], None),
+        ([], None),
+    ],
+)
+def test_app_comes_from_redirect_uris(redirect_uris: list[str], expected: str | None) -> None:
+    assert app_for_redirect_uris(redirect_uris) == expected
+
+
+def _google_provider(policy: dict[str, list[str]]) -> Any:
+    from key_value.aio.stores.memory import MemoryStore
+
+    settings = _settings(
+        auth_mode="google",
+        base_url="https://memory.example.com",
+        oauth_client_id="123.apps.googleusercontent.com",
+        oauth_client_secret="secret",
+        oauth_signing_key="k" * 64,
+        client_scope_policy=policy,
+    )
+    provider = build_auth_provider(settings, client_storage=MemoryStore())
+    provider.get_routes("/mcp")  # initialises the issuer that signs client tokens
+    return provider
+
+
+async def _token_for_client(provider: Any, name: str, redirect_uri: str) -> AccessToken:
+    """A verified upstream token as the proxy sees it for a registered client."""
+    from mcp.shared.auth import OAuthClientInformationFull
+    from pydantic import AnyUrl
+
+    client_id = f"client-{abs(hash((name, redirect_uri)))}"
+    await provider.register_client(
+        OAuthClientInformationFull(
+            client_id=client_id,
+            client_name=name,
+            redirect_uris=[AnyUrl(redirect_uri)],
+            token_endpoint_auth_method="none",
+        )
+    )
+    issued = provider.jwt_issuer.issue_access_token(
+        client_id=client_id, scopes=[], jti="j", expires_in=60
+    )
+    return AccessToken(
+        token=issued,
+        client_id="google-user-id",
+        scopes=["openid", "email"],
+        claims={"email": "me@example.com"},
+    )
+
+
+async def test_a_client_named_like_an_app_gets_nothing_extra() -> None:
+    """The display name is the client's own claim; only its redirect URI is proof."""
+    provider = _google_provider({"chatgpt": ["*"]})
+    token = await _token_for_client(provider, "ChatGPT", "http://localhost:4000/cb")
+    result = await provider._apply_policy(token)
+    assert result is not None
+    assert scopes.MEMORY_WRITE not in result.scopes
+    assert result.claims["pc_provider"] == "chatgpt"  # audit guess, grants nothing
+
+
+async def test_a_client_on_the_apps_callback_gets_the_apps_scopes() -> None:
+    provider = _google_provider({"chatgpt": ["*"]})
+    token = await _token_for_client(
+        provider, "Anything", "https://chatgpt.com/connector_platform_oauth_redirect"
+    )
+    result = await provider._apply_policy(token)
+    assert result is not None
+    assert scopes.MEMORY_WRITE in result.scopes
+    assert result.claims["pc_provider"] == "chatgpt"
 
 
 @pytest.mark.parametrize(

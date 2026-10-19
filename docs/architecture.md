@@ -652,6 +652,13 @@ marketing version:
    authoritative instead and nothing else changes. The abstraction is there so
    that upgrade is a config change.
 
+A policy entry names a client by the id this server issued it, or by app
+(`chatgpt`, `claude`, `gemini`, `grok`). The app is recognised from the
+client's registered redirect URIs (`auth/clients.py`), never from its display
+name: anyone can register a client called "ChatGPT", but only ChatGPT receives
+codes at ChatGPT's callback URL. For the same reason sign-in only accepts
+those apps' callback URLs, loopback, and any added in `PC_ALLOWED_REDIRECT_URIS`.
+
 A client that matches no policy entry gets **read-only** by default.
 
 ### Scopes

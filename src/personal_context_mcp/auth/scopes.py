@@ -13,7 +13,7 @@ Two paths, chosen by ``PC_AUTH_MODE``:
 * ``google`` / ``github`` - the upstream provider cannot mint scopes it has
   never heard of, so the token proves *identity only*. Capability scopes are
   then granted server-side from ``PC_CLIENT_SCOPE_POLICY``, keyed on the
-  registered OAuth client. This is a real, enforced boundary - it is just
+  registered OAuth client's id or on the app its redirect URIs belong to. This is a real, enforced boundary - it is just
   administered by the operator rather than requested by the client.
 
 Both paths end with the scopes on ``AccessToken.scopes``, so tool code and the
@@ -85,27 +85,24 @@ def resolve_client_scopes(
     policy: dict[str, list[str]],
     *,
     client_id: str | None,
-    client_name: str | None,
+    app: str | None,
 ) -> set[str]:
     """Pick the scope set for a registered OAuth client.
 
     Matching, most specific first:
-      1. exact ``client_id``
-      2. a key that appears (case-insensitively) in the client's display name,
-         which is how "chatgpt" / "claude" / "gemini" / "grok" are targeted.
-         That name is the string the client stored at registration, not a
-         verified publisher identity.
+      1. exact ``client_id`` (issued by this server at registration)
+      2. the client's ``app`` ("chatgpt", "claude", "gemini" or "grok"),
+         recognised from its redirect URIs by auth/clients.py. The display
+         name the client chose for itself is never used: anyone can register
+         a client called "ChatGPT".
       3. the ``"*"`` default
       4. :data:`DEFAULT_SCOPES`
     """
     if client_id and client_id in policy:
         return expand(policy[client_id])
 
-    if client_name:
-        lowered = client_name.lower()
-        for key, scopes in policy.items():
-            if key not in ("*", "") and key.lower() in lowered:
-                return expand(scopes)
+    if app and app in policy:
+        return expand(policy[app])
 
     if "*" in policy:
         return expand(policy["*"])
@@ -115,6 +112,9 @@ def resolve_client_scopes(
 
 def provider_from_client(client_name: str | None, client_id: str | None = None) -> str:
     """Best-effort mapping of an OAuth client to a provider id, for audit rows.
+
+    Guesses from names the client chose itself, so it must never grant
+    anything; scopes come from :func:`resolve_client_scopes`.
 
     Returns ``"unknown"`` rather than guessing when nothing matches - an audit
     trail that invents an attribution is worse than one that admits ignorance.

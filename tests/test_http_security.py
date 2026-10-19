@@ -399,3 +399,92 @@ async def test_other_requests_pass_through_untouched() -> None:
     assert await _through_basic_middleware("/token", original, "Bearer abc") == original
     assert await _through_basic_middleware("/token", original, "Basic !!notbase64") == original
     assert await _through_basic_middleware("/register", original, "Basic Y2lkOnNlYw==") == original
+
+
+# ------------------------------------------------- client redirect URIs
+
+
+@pytest.fixture
+def memory_client_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep OAuth client registrations in memory instead of Postgres."""
+    from key_value.aio.stores.memory import MemoryStore
+
+    from personal_context_mcp import server
+
+    monkeypatch.setattr(server, "PostgresKeyValue", MemoryStore)
+
+
+async def _register(settings: Settings, redirect_uri: str) -> httpx.Response:
+    transport = httpx.ASGITransport(app=create_app(settings))
+    async with httpx.AsyncClient(transport=transport, base_url="https://pc.example.com") as c:
+        return await c.post(
+            "/register",
+            json={
+                "client_name": "ChatGPT",
+                "redirect_uris": [redirect_uri],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            },
+        )
+
+
+@pytest.mark.usefixtures("memory_client_store")
+async def test_registration_refuses_a_redirect_to_an_unknown_site(tmp_path) -> None:
+    """Anyone can register a client. Without an allowlist a phishing link
+    could send the authorization code to any site the attacker names."""
+    settings = _google_settings(local_storage_root=str(tmp_path / "s"))
+    response = await _register(settings, "https://attacker.example/callback")
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_redirect_uri"
+
+
+@pytest.mark.usefixtures("memory_client_store")
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://claude.com/api/mcp/auth_callback",
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://grok.com/connectors-oauth-exchange-code/",
+        "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-1-pc",
+        "http://localhost:53682/callback",
+        "http://127.0.0.1:33418/",
+    ],
+)
+async def test_registration_accepts_the_known_apps_and_loopback(tmp_path, redirect_uri) -> None:
+    settings = _google_settings(local_storage_root=str(tmp_path / "s"))
+    response = await _register(settings, redirect_uri)
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.usefixtures("memory_client_store")
+async def test_operator_can_allow_another_app(tmp_path) -> None:
+    settings = _google_settings(
+        local_storage_root=str(tmp_path / "s"),
+        allowed_redirect_uris=["https://app.example.org/oauth/*"],
+    )
+    assert (await _register(settings, "https://app.example.org/oauth/cb")).status_code == 201
+    assert (await _register(settings, "https://attacker.example/cb")).status_code == 400
+
+
+@pytest.mark.usefixtures("memory_client_store")
+async def test_authorize_without_registration_refuses_an_unknown_redirect(tmp_path) -> None:
+    """Clients that skip registration and present the upstream client id get a
+    synthesized client that accepts any redirect URI unless an allowlist is set."""
+    settings = _google_settings(local_storage_root=str(tmp_path / "s"))
+    transport = httpx.ASGITransport(app=create_app(settings))
+    async with httpx.AsyncClient(transport=transport, base_url="https://pc.example.com") as c:
+        response = await c.get(
+            "/authorize",
+            params={
+                "client_id": settings.oauth_client_id,
+                "redirect_uri": "https://attacker.example/callback",
+                "response_type": "code",
+                "code_challenge": "x" * 43,
+                "code_challenge_method": "S256",
+                "state": "s",
+            },
+        )
+    assert response.status_code == 400
+    assert "attacker.example" not in response.headers.get("location", "")

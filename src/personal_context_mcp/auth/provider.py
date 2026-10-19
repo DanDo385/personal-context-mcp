@@ -28,6 +28,7 @@ from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.auth.providers.jwt import JWTVerifier, StaticTokenVerifier
 from key_value.aio.protocols import AsyncKeyValue
 
+from personal_context_mcp.auth.clients import allowed_redirect_patterns, app_for_redirect_uris
 from personal_context_mcp.auth.scopes import (
     ALL_SCOPES,
     expand,
@@ -72,13 +73,16 @@ class _PolicyMixin:
         self.settings = settings
         self._allowed = {s.strip().lower() for s in settings.allowed_subjects if s.strip()}
 
-    async def _client_identity(self, token: AccessToken) -> tuple[str | None, str | None]:
-        """(client_id, client_name) of the MCP client that presented the token.
+    async def _client_identity(
+        self, token: AccessToken
+    ) -> tuple[str | None, str | None, str | None]:
+        """(client_id, client_name, app) of the MCP client that presented the token.
 
-        Overridden in proxy mode, where the client id lives in the FastMCP JWT
-        rather than on the upstream token.
+        ``app`` comes from the client's registered redirect URIs, never its
+        display name (see auth/clients.py). Overridden in proxy mode, where
+        the client id lives in the FastMCP JWT rather than on the upstream token.
         """
-        return token.client_id, None
+        return token.client_id, None, None
 
     async def _apply_policy(self, token: AccessToken | None) -> AccessToken | None:
         if token is None:
@@ -98,16 +102,18 @@ class _PolicyMixin:
             logger.error("no allowlist configured in production; rejecting")
             return None
 
-        client_id, client_name = await self._client_identity(token)
+        client_id, client_name, app = await self._client_identity(token)
         granted = resolve_client_scopes(
             self.settings.client_scope_policy,
             client_id=client_id,
-            client_name=client_name,
+            app=app,
         )
 
         claims = dict(token.claims or {})
         claims["pc_client_name"] = client_name
-        claims["pc_provider"] = provider_from_client(client_name, client_id)
+        # Audit only: the verified app when there is one, else a best-effort
+        # guess from the name, which grants nothing.
+        claims["pc_provider"] = app or provider_from_client(client_name, client_id)
         claims["pc_upstream_scopes"] = list(token.scopes)
 
         # Capability scopes come only from the server-side policy; any the
@@ -126,7 +132,9 @@ class _PolicyMixin:
 class _ProxyPolicyMixin(_PolicyMixin):
     """Policy mixin for OAuth-proxy providers (Google, GitHub)."""
 
-    async def _client_identity(self, token: AccessToken) -> tuple[str | None, str | None]:
+    async def _client_identity(
+        self, token: AccessToken
+    ) -> tuple[str | None, str | None, str | None]:
         # In proxy mode `token.client_id` is the upstream *user* id, not the
         # MCP client. The MCP client id is a claim of the FastMCP JWT we
         # issued, which we can re-verify locally and cheaply.
@@ -134,18 +142,25 @@ class _ProxyPolicyMixin(_PolicyMixin):
             payload = self.jwt_issuer.verify_token(token.token)  # type: ignore[attr-defined]
             client_id = payload.get("client_id")
         except Exception:
-            return None, None
+            return None, None, None
 
         if not client_id:
-            return None, None
+            return None, None, None
 
-        client_name: str | None = None
         try:
             client = await self.get_client(client_id)  # type: ignore[attr-defined]
-            client_name = getattr(client, "client_name", None) if client else None
         except Exception:
-            client_name = None
-        return client_id, client_name
+            client = None
+        if client is None:
+            return client_id, None, None
+
+        # A client known by its metadata URL (CIMD) lists its redirect URIs
+        # in that document; a registered one in its record.
+        document = getattr(client, "cimd_document", None)
+        redirect_uris = (document.redirect_uris if document else None) or (
+            client.redirect_uris or []
+        )
+        return client_id, getattr(client, "client_name", None), app_for_redirect_uris(redirect_uris)
 
 
 class PolicyGoogleProvider(_ProxyPolicyMixin, GoogleProvider):
@@ -258,6 +273,9 @@ def build_auth_provider(
         "resource_base_url": str(settings.base_url),
         "client_storage": client_storage,
         "require_authorization_consent": True,
+        # Without this FastMCP accepts any https redirect URI, so a phishing
+        # link could deliver an authorization code to any site.
+        "allowed_client_redirect_uris": allowed_redirect_patterns(settings.allowed_redirect_uris),
     }
     signing_key = settings.oauth_signing_key.get_secret_value()
     if signing_key:
