@@ -127,3 +127,10 @@ def test_resolve_reference_accepts_alias_misspelling_and_id() -> None:
     assert resolve_reference(str(harbor.id), PROJECTS).project is harbor  # type: ignore[union-attr]
     assert resolve_reference("nonexistent thing", PROJECTS) is None
     assert isinstance(harbor.id, UUID)
+
+
+def test_a_single_weak_hint_is_not_a_project() -> None:
+    found = infer("notes on the ledger format", PROJECTS)
+    assert found.project is None
+    assert not found.tied
+    assert [m.project.slug for m in found.candidates] == ["atlas-ledger"]

@@ -904,7 +904,9 @@ class RetrievalService:
                 ],
             ),
             None,
-            [m.project for m in found.candidates[:2]],
+            # Short handoffs only when the query really could mean either
+            # project; a single weak hint is reported, not acted on.
+            [m.project for m in found.candidates[:2]] if found.tied else [],
         )
 
     async def _handoff(

@@ -194,3 +194,23 @@ def _uuid(value: Any):
     from uuid import UUID
 
     return UUID(str(value))
+
+
+async def test_untagged_session_proposals_are_read_only(db, tmp_path) -> None:
+    from personal_context_mcp.sessions.backfill import untagged_sessions, write_csv
+
+    seeded = await seed(db)
+    before = await db.fetchval("SELECT count(*) FROM session_summaries WHERE project_id IS NULL")
+    proposals = {seeded.key_for(p.session_id): p for p in await untagged_sessions(db)}
+
+    harbor = proposals["s_hn_untagged"]
+    assert harbor.proposed == "harbor-notes"
+    assert "harbor notes" in harbor.reason
+    assert harbor.synthetic_id
+    assert proposals["s_noise_soup"].proposed is None
+
+    report = write_csv(list(proposals.values()), tmp_path / "proposals.csv")
+    assert report["proposed"] == 1
+    assert (tmp_path / "proposals.csv").read_text().count("\n") == len(proposals) + 1
+    after = await db.fetchval("SELECT count(*) FROM session_summaries WHERE project_id IS NULL")
+    assert after == before

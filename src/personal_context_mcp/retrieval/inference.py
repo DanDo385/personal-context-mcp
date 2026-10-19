@@ -87,6 +87,11 @@ class Inference:
     project: ProjectRow | None
     reason: str
     candidates: list[Match] = field(default_factory=list)
+    #: How sure the match is, 0 to 1. Only set when a project was chosen.
+    score: float = 0.0
+    #: True when two candidates scored the same: the query really could mean
+    #: either. False when the only candidate is a weak hint.
+    tied: bool = False
 
 
 def resolve_reference(reference: str, projects: list[ProjectRow]) -> Match | None:
@@ -122,11 +127,28 @@ def _fuzzy(haystack: list[str], needle: tuple[str, ...]) -> tuple[float, str] | 
     if len(target) < 5:
         return None
     n = len(needle)
+    matcher = SequenceMatcher(None, autojunk=False)
+    matcher.set_seq2(target)
     best: tuple[float, str] | None = None
+    first = needle[0][:1]
+    seen: set[str] = set()
     for i in range(len(haystack) - n + 1):
+        # A typo almost never changes the first letter; checking it first
+        # keeps a long message cheap.
+        if haystack[i][:1] != first:
+            continue
         window = " ".join(haystack[i : i + n])
-        ratio = SequenceMatcher(None, window, target).ratio()
-        if ratio >= 0.85 and window != target and (best is None or ratio > best[0]):
+        if window in seen:
+            continue
+        seen.add(window)
+        # A ratio of 0.85 needs lengths within about 30% of each other.
+        if window == target or abs(len(window) - len(target)) > len(target) * 0.3:
+            continue
+        matcher.set_seq1(window)
+        if matcher.real_quick_ratio() < 0.85 or matcher.quick_ratio() < 0.85:
+            continue
+        ratio = matcher.ratio()
+        if ratio >= 0.85 and (best is None or ratio > best[0]):
             best = (ratio, window)
     return best
 
@@ -174,8 +196,14 @@ def infer(text: str, projects: list[ProjectRow]) -> Inference:
         return Inference(None, "no project was passed and the query names none")
     top = ranked[0]
     tied = [m for m in ranked[1:] if top.score - m.score <= TIE_MARGIN]
-    if tied or top.score < INFER_THRESHOLD:
-        candidates = [top, *(tied or ranked[1:2])]
+    if tied:
+        candidates = [top, *tied]
         names = " and ".join(repr(m.project.slug) for m in candidates)
-        return Inference(None, f"the query could mean {names}", candidates=candidates)
-    return Inference(top.project, top.reason, candidates=[])
+        return Inference(None, f"the query could mean {names}", candidates=candidates, tied=True)
+    if top.score < INFER_THRESHOLD:
+        return Inference(
+            None,
+            f"not sure enough to pick a project: closest is {top.project.slug!r} ({top.reason})",
+            candidates=[top],
+        )
+    return Inference(top.project, top.reason, candidates=[], score=round(top.score, 3))

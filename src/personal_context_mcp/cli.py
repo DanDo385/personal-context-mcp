@@ -461,6 +461,37 @@ def reclassify(limit: int) -> None:
     asyncio.run(run())
 
 
+@main.command(name="propose-session-projects")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    required=True,
+    help="CSV file to write the proposals to.",
+)
+@click.option("--limit", type=int, default=None, help="Only the newest N untagged sessions.")
+def propose_session_projects_cmd(out_path: Path, limit: int | None) -> None:
+    """Propose a project for each session saved without one. Dry run: writes nothing.
+
+    Reads in a read-only transaction and writes a CSV with the proposed project,
+    a score and the reason for each session, for a person to review.
+    """
+    from personal_context_mcp.sessions.backfill import untagged_sessions, write_csv
+
+    settings = get_settings()
+    _configure_cli_logging(settings)
+
+    async def run() -> None:
+        db = await Database.connect(settings)
+        try:
+            proposals = await untagged_sessions(db, limit=limit)
+        finally:
+            await db.close()
+        click.echo(json.dumps(write_csv(proposals, out_path), indent=2))
+
+    asyncio.run(run())
+
+
 @main.command(name="reclassify-conversations")
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--provider", type=click.Choice(sorted(IMPORTERS)), default=None)
