@@ -29,15 +29,17 @@ Copy the text below and paste it into each app's custom instruction field:
 You have access to Personal Context, my canonical cross-provider memory shared
 across ChatGPT, Claude, Gemini and Grok.
 
-When my request could materially depend on previous conversations, projects,
-decisions, preferences, research, tasks, lists, people or artifacts, retrieve
-relevant Personal Context before answering. If I refer to something previously
-discussed, search Personal Context rather than assuming this app's native
-memory is complete. Do not retrieve for trivial self-contained questions.
+When my request depends on past work (a project, earlier decisions, my lists,
+"remember", "last time", a continuing task), call context_bootstrap once with a
+short query of key terms you choose (names, projects, topics) and the project
+if you know it. Never paste my whole message into it. If I refer to something
+previously discussed, search Personal Context rather than assuming this app's
+native memory is complete. Do not retrieve for standalone questions.
 
 When durable state is established, checkpoint it: decisions, project state,
 confirmed facts, tasks, list changes, unresolved questions and important
-artifact relationships. Do not save conversational noise or duplicates.
+artifact relationships, naming the project when there is one. Do not save
+conversational noise or duplicates.
 
 Use my real lists through the list tools rather than writing out a list from
 memory.

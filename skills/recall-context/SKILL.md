@@ -2,10 +2,10 @@
 name: recall-context
 description: >
   Retrieve the user's shared cross-provider context before answering. Use when
-  the request could depend on earlier conversations, projects, decisions,
-  preferences, research, tasks, lists, people or artifacts - and always when
-  the user says "we discussed", "remember", "continue", "last time", or "what
-  did we decide".
+  the request depends on past work - a project, earlier decisions, lists,
+  preferences, a continuing task - and always when the user says "we
+  discussed", "remember", "continue", "last time", or "what did we decide".
+  Never for standalone questions.
 ---
 
 # Recall context
@@ -31,10 +31,16 @@ Do **not** retrieve for a self-contained question ("what's 12% of 340",
 
 ## Procedure
 
-1. **Start broad.** Call `context_bootstrap` with the user's message verbatim.
-   Do not summarise it first - the retrieval works better on the real wording.
-   It returns durable memories, active project state, live decisions, open
-   tasks, relevant notes and recent summaries, inside a token budget.
+1. **Start with one bootstrap.** Call `context_bootstrap` with a short `query`
+   of key terms you choose, the way you would search your own memory: names,
+   projects, topics, ids (`"harbor notes deploy"`, not the user's paragraph).
+   Pass `project` when you know it; otherwise the server infers it from the
+   query and says which project it picked and why. Never paste the user's
+   message: it is reduced to key terms anyway, and the extra words cost tokens.
+   The package starts with the project's handoff (the latest session summaries
+   with their open questions, open tasks, active decisions), then items that
+   match the query, then raw transcript excerpts only if nothing else matched.
+   `layers` says which of these ran and why the others did not.
 
 2. **Narrow if needed.** If the package did not answer the question, call
    `context_search` with a sharper query. Add `project=` when you know which
@@ -61,7 +67,9 @@ Do **not** retrieve for a self-contained question ("what's 12% of 340",
 
 - Never present an `assistant_generated` memory as something the user said.
 - If two retrieved items conflict, surface the conflict with dates rather than
-  silently picking the newer one.
+  silently picking the newer one. The package lists the ones it noticed under
+  `conflicts`; a decision marked `superseded` has been replaced by
+  `superseded_by`.
 - Do not dump the whole package into your reply. Use what is relevant.
 
 ## Failure behaviour
@@ -75,9 +83,14 @@ continue without it; do not retry in a loop.
 
 > "What did we decide about the memory architecture?"
 
-`context_bootstrap(user_message="What did we decide about the memory
-architecture?")` → returns the decision with its date, project and originating
-provider. Answer with the decision and note which assistant it was made in.
+`context_bootstrap(query="memory architecture decision")` → returns the
+decision with its date, project and originating provider. Answer with the
+decision and note which assistant it was made in.
+
+> "Where did we leave off on Harbor Notes?"
+
+`context_bootstrap(project="harbor-notes")` with no query → the handoff alone:
+latest sessions, open questions, open tasks, active decisions.
 
 > "Add this to my reading list."
 

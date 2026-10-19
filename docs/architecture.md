@@ -224,23 +224,75 @@ flowchart TB
 
 ## Context retrieval
 
-Hybrid: Postgres full-text search unioned with pgvector cosine similarity,
-reranked by importance, recency and project association, then packed to a token
-budget.
+Full-text search in Postgres, ranked in Python, packed to a token budget. No
+model, classifier or vault call happens on these paths; embeddings, when
+enabled, are used for writing and deduplication, not for reads.
 
 ```
-context_bootstrap(user_message, token_budget=1200, project=None)
+context_bootstrap(query=None, project=None, token_budget=1200, user_message=None)
 context_search(query, limit, project, provider, include_messages=False)
 context_for_topic(topic, token_budget, project)
 context_recent(limit, provider, project)
 ```
 
-`context_bootstrap` is the one that matters. It always includes current project
-state and the most important durable memories, whether or not they matched the
-query — "what am I working on" is context the answer usually needs even when
-those words do not appear in the question. Its text result is one line: how
-many items, and how many tokens they used against the budget. The package is
-the structured result.
+**The calling model chooses the query.** Tool descriptions and the shared
+instruction tell models to call `context_bootstrap` only when a request depends
+on past work, and to pass a short `query` of key terms (names, projects,
+topics), the way they search their own memory. `user_message` is deprecated but
+still accepted: it is reduced to its key terms on the server.
+
+**Search** (`retrieval/query.py`, `retrieval/service.py`). The query is parsed
+by code: stopwords and filler ("hi", "remind me", "decided") are dropped and at
+most 12 content words are kept, names and identifiers first. Content words are
+ORed, so an ordinary question matches; rows that match more of them, or match
+a phrase or a whole compound like `last-writer-wins`, score higher. With three
+or more terms a row must match about a third of them. `"quoted phrases"` must
+appear, `-word` excludes, a UUID is an exact lookup, `LH-142` and `fly.io` are
+matched whole as well as split, and long words also match a shortened prefix so
+a typo such as "postgress" still finds "postgres". Every layer (memories,
+decisions, summaries, notes, open list items, artifacts, and messages on
+request) is searched in one SQL statement. The score is
+
+    text match x who said it x kind x recency
+
+where "who said it" puts the user's statements above an assistant's
+conclusions and imported text lowest. Those weights break ties between similar
+matches; they do not let a weak match outrank a strong one. A `project` filter
+covers rows tagged to the project and untagged rows that name it.
+
+**Bootstrap** fills the budget in this order, skipping an item that does not
+fit rather than stopping:
+
+1. **handoff**: for the project, the newest one to three session summaries with
+   their date, provider and open questions; open tasks and list items; active
+   decisions. Sessions with no project that name the project are included and
+   say so.
+2. **relevant**: items matching the query, ranked as above, from the project and
+   from items with no project.
+3. **raw_messages**: transcript excerpts, only when 1 and 2 found nothing.
+
+The project is the one passed (matched by slug, name, alias or a near
+misspelling) or one inferred from the query: a name or alias written loosely,
+a repository or worktree path, a misspelling. The package says which and why
+in `project`. When the query could mean two projects, both get a short handoff
+and `project.candidates` lists them. `layers` reports every layer, run or
+skipped, with the reason; `layers_used` lists the ones that contributed items.
+
+**Decisions that change.** A decision with a supersede link is returned as
+`status: superseded` with `superseded_by`. When a newer decision, memory or
+session summary in the same project shares several topic words with a returned
+decision, both are marked in `conflicts_with` and the pair is listed in
+`conflicts` with the newer item's provenance. Code cannot tell which one
+stands, so the package says to ask the user; it never silently returns only
+the older one.
+
+Its text result is one line: how many items, and how many tokens they used
+against the budget. The package is the structured result.
+
+The eval set in `tests/eval/retrieval_cases.yaml` (39 cases over a synthetic
+fixture) reports recall@5, MRR, stale-decision errors, duplicates, tokens,
+database round trips and latency; `tests/test_integration_retrieval_eval.py`
+fails if any case regresses.
 
 Every returned item carries provenance:
 
@@ -252,9 +304,11 @@ Every returned item carries provenance:
 | `tool_result` | Output of a tool. |
 | `imported_metadata` | Derived mechanically from an import. Weakest. |
 
-**Embeddings are optional.** With `PC_EMBEDDING_PROVIDER=none` retrieval runs on
-full-text search alone and nothing leaves the process. That is the default, so
-the system is useful before you have picked an embedding vendor.
+**Embeddings are optional.** Retrieval runs on full-text search alone, so
+nothing leaves the process on a read. `PC_EMBEDDING_PROVIDER=none` is the
+default, so the system is useful before you have picked an embedding vendor;
+when a provider is set, vectors are stored on write and the read path still
+makes no model call.
 
 ---
 

@@ -55,6 +55,10 @@ Find what you're seeing below. Each guide also ends with a table for its own ste
 | Gemini: *Client ID ... is not registered with this server* | Manual credentials were entered under Advanced features, and they aren't an MCP registration of this server. | Leave the credential fields empty (this server supports Dynamic Client Registration); remove the custom app in Gemini and add it again with only the URL. |
 | Gemini's *Custom apps* option or the connector disappeared | *Gemini Apps Activity / Keep Activity* was turned off. | Turn it back on; custom apps need it. You can still turn off *past chats*. |
 | The app never uses its memory unprompted | The custom instruction is missing. | Paste [instructions/shared.md](../instructions/shared.md) into the app's settings. |
+| The app pastes your whole message into `context_bootstrap` | It is following an older instruction. | Paste the current [instructions/shared.md](../instructions/shared.md) again. Old calls still work: the server keeps only the key words and adds a note saying `user_message` is deprecated. |
+| A chat's work doesn't show up when you start a new chat about that project | That session was saved without a project. | Ask the app to name the project when it checkpoints (`project` in `session_checkpoint`). Untagged sessions that mention the project by name still appear, marked as possibly belonging to it. |
+| `No project matches '...'; the session was saved without one` | The app named a project that doesn't exist, or misspelled it badly. | Ask the app to call `project_list` and checkpoint again with the real name. Nothing is created automatically. |
+| A package lists `conflicts` | A newer item on the same subject may overrule an older decision, and the server can't tell which one stands. | Tell the app which one is current; it can record that as a new decision. |
 
 ## Obsidian
 

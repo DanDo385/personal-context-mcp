@@ -53,6 +53,10 @@ real names before referring to them)
      supplying it makes repeat checkpoints update one record
    - `summary` - a few sentences written for a reader who cannot see this
      conversation
+   - `project` - the project this session was about, when there is one.
+     Without it the session is often saved with no project and never appears
+     in that project's handoff. An unknown name is reported in `notes`, not
+     created.
    - `decisions` - one sentence each, with rationale if it was discussed
    - `facts` - self-contained, with **accurate** `provenance`
    - `tasks` - concrete unfinished actions
@@ -92,6 +96,7 @@ session_checkpoint(
   provider="claude",
   provider_conversation_id="conv_01H...",
   title="Shared AI memory architecture",
+  project="personal-ai",
   summary="Settled the ownership model: Postgres owns structured state, object
            storage owns file bytes, Obsidian is the curated human layer.",
   decisions=[{

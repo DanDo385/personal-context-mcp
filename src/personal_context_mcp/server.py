@@ -58,21 +58,25 @@ SERVER_INSTRUCTIONS = """\
 Personal Context is this user's canonical memory, shared across ChatGPT, \
 Claude, Gemini and Grok.
 
-Retrieve before answering (context_bootstrap) whenever the request could \
-depend on earlier conversations, projects, decisions, preferences, research, \
-tasks, lists, people or artifacts - and always when the user refers to \
-something previously discussed. Skip retrieval for trivial self-contained \
-questions.
+Retrieve (context_bootstrap) only when the request depends on past work: a \
+project, earlier decisions, lists, "remember", "last time", a continuing task. \
+Never for standalone questions. Decide what to look for yourself, as with your \
+own memory search: pass a short query of key terms and names, plus the project \
+when you know it. Do not paste the user's message. One bootstrap call returns \
+the project's handoff (latest sessions, open questions, open tasks, active \
+decisions); use context_search only for something it did not cover.
 
 Checkpoint durable state (session_checkpoint) when something is settled: a \
 decision, a confirmed fact, a task, a list change, a project update, an \
-unresolved question. Not conversational noise.
+unresolved question. Name the project when there is one. Not conversational \
+noise.
 
 Capture files through the artifact tools, and never describe an artifact as \
 saved unless the tool result reports capture_status "captured".
 
 Every retrieved item carries provenance. Treat "user_statement" as what the \
-user said and "assistant_generated" as a model's conclusion, not a fact.
+user said and "assistant_generated" as a model's conclusion, not a fact. When \
+a package lists conflicts, ask the user which one stands; do not pick one.
 """
 
 

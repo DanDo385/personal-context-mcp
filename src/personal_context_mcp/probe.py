@@ -34,6 +34,8 @@ _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 #: Read-only calls made once the tool list checks out.
 DRY_RUN_CALLS: tuple[tuple[str, dict[str, Any]], ...] = (
+    # user_message, not query: the probe must also work against a server that
+    # predates the query parameter.
     ("context_bootstrap", {"user_message": "Connection check from personal-context-mcp probe."}),
     ("review_list", {"limit": 1}),
 )
