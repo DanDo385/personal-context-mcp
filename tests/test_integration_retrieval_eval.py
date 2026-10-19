@@ -22,10 +22,11 @@ from eval.harness import QueryCounter, run
 pytestmark = requires_db
 
 #: Floors. Raise them when retrieval improves; never lower them to pass.
-MIN_RECALL_AT_5 = 0.0
-MIN_MRR = 0.0
-MAX_STALE_DECISION_ERRORS = 10_000
-MAX_DUPLICATES = 10_000
+#: Baseline at 2ca2095 was recall@5 0.522, MRR 0.44, 4 stale-decision errors.
+MIN_RECALL_AT_5 = 0.95
+MIN_MRR = 0.85
+MAX_STALE_DECISION_ERRORS = 0
+MAX_DUPLICATES = 0
 
 
 @pytest.fixture
@@ -53,6 +54,7 @@ async def test_retrieval_eval(
     if target := os.environ.get("PC_EVAL_REPORT"):
         Path(target).write_text(json.dumps(report, indent=2))
 
+    assert not report["failures"], report["failures"]
     assert report["recall_at_5"] >= MIN_RECALL_AT_5
     assert report["mrr"] >= MIN_MRR
     assert report["stale_decision_errors"] <= MAX_STALE_DECISION_ERRORS

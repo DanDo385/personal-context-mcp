@@ -49,7 +49,12 @@ class _Retrieval:
         self.package = package
 
     async def bootstrap(
-        self, _user_message: str, token_budget: int = 1200, project: str | None = None
+        self,
+        _query: str | None = None,
+        *,
+        user_message: str | None = None,
+        token_budget: int = 1200,
+        project: str | None = None,
     ) -> ContextPackage:
         return self.package
 

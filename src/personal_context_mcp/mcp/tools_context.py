@@ -29,27 +29,50 @@ def register(mcp: FastMCP) -> None:
         output_schema=object_output_schema(),
     )
     async def context_bootstrap(
-        user_message: Annotated[
-            str,
-            Field(description="The user's message, verbatim. Do not summarise it first."),
-        ],
+        query: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "A few key terms you choose, like your own memory search: names, "
+                    "projects, topics (e.g. 'harbor notes deploy'). Not the user's message. "
+                    "Leave empty to get only the project's handoff."
+                )
+            ),
+        ] = None,
+        project: Annotated[
+            str | None,
+            Field(description="Project slug or name, when you know it. Inferred otherwise."),
+        ] = None,
         token_budget: Annotated[
             int, Field(ge=200, le=4000, description="Approximate token ceiling for the result.")
         ] = 1200,
-        project: Annotated[
-            str | None, Field(description="Narrow to one project slug or name, if known.")
+        user_message: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Deprecated: use query. If sent, only its key terms are searched, "
+                    "never the whole text."
+                )
+            ),
         ] = None,
     ) -> ToolResult:
-        """Smallest useful package of shared context. Skip for trivial questions.
+        """Start a chat that continues earlier work: one call, one package.
 
-        Call first when the request depends on earlier conversations, projects,
-        decisions, preferences, lists or artifacts. Raw transcripts are included
-        only when nothing else answered. Raise token_budget only if truncated.
-        The text result is one line of counts. The package is the structured result.
+        Call only when the request depends on past work: a project, earlier
+        decisions, lists, "remember", "last time", a continuing task.
+        Skip for trivial questions and anything self-contained.
+
+        Returns the project's handoff first (latest session summaries with
+        their open questions, open tasks, active decisions), then items
+        matching query, then raw transcript excerpts only if nothing else
+        matched. Says which project it used and why, which layers ran, and
+        flags decisions a newer item may overrule. Raise token_budget only if
+        truncated. The text result is one line of counts; the package is the
+        structured result.
         """
         services = get_services()
         package = await services.retrieval.bootstrap(
-            user_message, token_budget=token_budget, project=project
+            query, user_message=user_message, token_budget=token_budget, project=project
         )
         payload = dump(package)
         items = payload.get("items") or []
@@ -67,7 +90,15 @@ def register(mcp: FastMCP) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False},
     )
     async def context_search(
-        query: Annotated[str, Field(description="What to look for, in natural language.")],
+        query: Annotated[
+            str,
+            Field(
+                description=(
+                    "Key terms you choose, not the user's message: names, topics, ids. "
+                    'Use "quoted phrases" for exact wording and -word to exclude.'
+                )
+            ),
+        ],
         limit: Annotated[int, Field(ge=1, le=20, description="Maximum results to return.")] = 5,
         project: Annotated[str | None, Field(description="Project slug or name.")] = None,
         provider: Annotated[
@@ -79,7 +110,13 @@ def register(mcp: FastMCP) -> None:
             Field(description="Verbatim excerpts. Leave false; summaries are smaller."),
         ] = False,
     ) -> list[dict[str, Any]]:
-        """Search memories, summaries, notes and decisions. Use after bootstrap."""
+        """Ranked search over decisions, memories, summaries, notes, lists and artifacts.
+
+        Use when bootstrap did not cover what you need. Results match any of the
+        terms, rank higher the more they match, and favour the user's own words
+        over an assistant's summary and recent items over old ones. An empty
+        result means nothing matched: say so rather than guess.
+        """
         services = get_services()
         items = await services.retrieval.search(
             query,

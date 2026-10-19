@@ -277,6 +277,7 @@ async def test_cross_provider_recall(services) -> None:
     await _checkpoint(
         services,
         provider="claude",
+        project_updates=[CheckpointProjectUpdate(project="Personal AI")],
         decisions=[
             CheckpointDecision(
                 statement="Supabase is canonical structured state and Obsidian is curated knowledge.",
@@ -285,8 +286,10 @@ async def test_cross_provider_recall(services) -> None:
         ],
     )
 
+    # The question shares no words with the decision, so it is found through
+    # the project's handoff, not the text search.
     package = await services.retrieval.bootstrap(
-        "What did I decide about my shared AI memory architecture?"
+        "What did I decide about my shared AI memory architecture?", project="Personal AI"
     )
     joined = " ".join(item.content for item in package.items)
     assert "Supabase is canonical" in joined

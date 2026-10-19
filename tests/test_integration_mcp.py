@@ -126,12 +126,17 @@ async def test_checkpoint_then_bootstrap_through_mcp(mcp_client) -> None:
                 }
             ],
             "tasks": [{"text": "Test the Gemini connector on iPhone"}],
+            "project_updates": [{"project": "Personal AI"}],
         },
     )
 
     package = await mcp_client.call_tool(
         "context_bootstrap",
-        {"user_message": "What did I decide about my shared AI memory architecture?"},
+        # The older calling convention (a whole message) must keep working.
+        {
+            "user_message": "What did I decide about my shared AI memory architecture?",
+            "project": "Personal AI",
+        },
     )
     result = package.structured_content or {}
     joined = " ".join(item["content"] for item in result["items"])

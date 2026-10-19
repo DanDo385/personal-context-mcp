@@ -16,9 +16,7 @@ def _run(tmp_path: Path, *args: str) -> list[str]:
     log.unlink(missing_ok=True)
     fake = bindir / "personal-context-mcp"
     fake.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s\\n' \"$*\" >> {log}\n"
-        "exit 0\n",
+        f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {log}\nexit 0\n",
         encoding="utf-8",
     )
     fake.chmod(0o755)

@@ -102,6 +102,56 @@ class ContextItem(Base):
     project: str | None = None
     provenance: Provenance_
     estimated_tokens: int = 0
+    #: When it was decided, or last updated. Recency is ranked on this.
+    effective_at: datetime | None = None
+    #: Which bootstrap layer returned it: handoff, relevant or raw.
+    layer: str | None = None
+    #: Decisions: "active", or "superseded" with the id that replaced it.
+    status: str | None = None
+    superseded_by: UUID | None = None
+    #: Newer items on the same subject that may overrule this one. Ask the user.
+    conflicts_with: list[UUID] = Field(default_factory=list)
+    #: Session summaries: questions left open in that session.
+    open_questions: list[str] = Field(default_factory=list)
+    #: Why this item is here when that is not obvious (e.g. an untagged session).
+    reason: str | None = None
+
+
+class ProjectCandidate(Base):
+    slug: str
+    name: str
+    reason: str
+
+
+class ProjectChoice(Base):
+    """Which project the package is about, and how that was decided."""
+
+    slug: str | None = None
+    name: str | None = None
+    #: given (the caller passed it), inferred (read from the query), none.
+    source: Literal["given", "inferred", "none"]
+    reason: str
+    #: Set when the query could mean more than one project.
+    candidates: list[ProjectCandidate] = Field(default_factory=list)
+
+
+class LayerReport(Base):
+    name: str
+    status: Literal["ran", "skipped"]
+    reason: str
+    items: int = 0
+
+
+class ConflictReport(Base):
+    """Two items on the same subject where the newer may overrule the older."""
+
+    kind: Literal["superseded", "possible_conflict"]
+    #: Older first, newer second.
+    ids: list[UUID]
+    older: str
+    newer: str
+    newer_provenance: str
+    advice: str
 
 
 class ContextPackage(Base):
@@ -114,6 +164,12 @@ class ContextPackage(Base):
     layers_used: list[str] = Field(default_factory=list)
     truncated: bool = False
     notes: list[str] = Field(default_factory=list)
+    #: The search terms actually used, after dropping filler words.
+    keywords: list[str] = Field(default_factory=list)
+    project: ProjectChoice | None = None
+    #: Every layer, including the ones skipped, with the reason.
+    layers: list[LayerReport] = Field(default_factory=list)
+    conflicts: list[ConflictReport] = Field(default_factory=list)
 
 
 class MemoryRecord(Base):
