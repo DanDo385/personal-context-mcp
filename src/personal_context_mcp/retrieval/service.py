@@ -29,7 +29,7 @@ import json
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import asyncpg
@@ -59,12 +59,8 @@ _MAX_ITEM_TOKENS = 450
 _PACKAGE_OVERHEAD = 110
 #: Below this budget, items leave out fields the package already implies.
 _COMPACT_BELOW = 400
-#: Trim order when the measured package is over budget: highest tier goes first.
-_TIER_CORE = 0
-_TIER_RELEVANT_TOP = 1
-_TIER_HANDOFF_REST = 2
-_TIER_RELEVANT_REST = 3
-_TIER_RAW = 4
+#: Conflict reports per package; the rest are dropped, newest-statement first kept.
+_MAX_CONFLICT_REPORTS = 3
 
 #: Who said it. The user's own words outrank a model's conclusions; text
 #: lifted from imported chats (titles, transcript openings) ranks lowest.
@@ -370,17 +366,39 @@ SELECT * FROM (
 """
 
 #: Newer rows in the same project that share several topic words with a
-#: returned decision. Project-name words do not count as shared topic.
+#: returned decision. Project-name words do not count as shared topic, and
+#: neither do words found in at least 30% of the project's decisions and
+#: sessions (the user's own name, the product's jargon): those say nothing
+#: about whether two items are about the same thing.
 _CONFLICT_SQL = """
-WITH d AS (
+WITH x AS (
+    SELECT id, project_id, decided_at, search_tsv FROM decisions
+    WHERE id = ANY($1::uuid[]) AND status = 'active'
+), docs AS (
+    SELECT o.project_id, o.search_tsv FROM decisions o
+    WHERE o.status = 'active' AND o.project_id IN (SELECT project_id FROM x)
+    UNION ALL
+    SELECT coalesce(s.project_id, c.project_id), s.search_tsv
+    FROM session_summaries s JOIN conversations c ON c.id = s.conversation_id
+    WHERE coalesce(s.project_id, c.project_id) IN (SELECT project_id FROM x)
+), sizes AS (
+    SELECT project_id, count(*) AS n FROM docs GROUP BY project_id
+), common AS (
+    SELECT docs.project_id, l
+    FROM docs JOIN sizes USING (project_id), unnest(tsvector_to_array(docs.search_tsv)) l
+    WHERE sizes.n >= 10
+    GROUP BY docs.project_id, sizes.n, l
+    HAVING count(*) >= 0.3 * sizes.n
+), d AS (
     SELECT x.id, x.project_id, x.decided_at,
            ARRAY(SELECT l FROM unnest(tsvector_to_array(x.search_tsv)) l
                  WHERE l ~ '^[a-z0-9]+$'
                    AND l <> ALL(tsvector_to_array(to_tsvector('english',
-                         coalesce(p.name, '') || ' ' || replace(coalesce(p.slug, ''), '-', ' ')))))
+                         coalesce(p.name, '') || ' ' || replace(coalesce(p.slug, ''), '-', ' '))))
+                   AND l NOT IN (SELECT common.l FROM common
+                                 WHERE common.project_id = x.project_id))
              AS lex
-    FROM decisions x LEFT JOIN projects p ON p.id = x.project_id
-    WHERE x.id = ANY($1::uuid[]) AND x.status = 'active'
+    FROM x LEFT JOIN projects p ON p.id = x.project_id
 )
 SELECT d.id AS older_id, d.lex AS older_lex, cand.*
 FROM d CROSS JOIN LATERAL (
@@ -426,6 +444,16 @@ def _name_query(project: inference.ProjectRow | None) -> str:
             continue
         phrases.append("(" + " <-> ".join(f"'{w}'" for w in spelling) + ")")
     return " | ".join(phrases)
+
+
+@dataclass
+class _Conflict:
+    older: UUID
+    newer: UUID
+    kind: Literal["superseded", "possible_conflict"]
+    newer_kind: str
+    newer_provenance: str
+    newer_body: str | None
 
 
 @dataclass
@@ -573,62 +601,64 @@ class RetrievalService:
             if len(items) >= limit:
                 break
         if flag_conflicts:
-            await self._flag_conflicts(items)
+            self._mark_conflicts(items, await self._find_conflicts(items))
         return items
 
     # ------------------------------------------------------------ conflicts
 
-    async def _flag_conflicts(
-        self, items: list[ContextItem], reports: list[ConflictReport] | None = None
-    ) -> None:
-        """Mark decisions that a newer item on the same subject may overrule.
+    async def _find_conflicts(self, items: list[ContextItem]) -> list[_Conflict]:
+        """Pairs where a newer item may overrule a returned decision. One query.
 
         An explicit supersede link is certain. Shared topic words are not, so
-        those are flagged as possible conflicts for the user to settle; the
-        older decision is never silently preferred or silently dropped.
+        those are possible conflicts for the user to settle; the older decision
+        is never silently preferred or silently dropped.
         """
-        by_id = {i.id: i for i in items}
-        for item in items:
-            if item.status == "superseded" and item.superseded_by:
-                report = ConflictReport(
-                    kind="superseded",
-                    ids=[item.id, item.superseded_by],
-                    newer=None if item.superseded_by in by_id else "see superseded_by",
-                    newer_provenance="user_statement",
-                    advice="Replaced; use the newer decision.",
-                )
-                if reports is not None and report not in reports:
-                    reports.append(report)
-
+        found: list[_Conflict] = [
+            _Conflict(
+                older=i.id,
+                newer=i.superseded_by,
+                kind="superseded",
+                newer_kind="decision",
+                newer_provenance="user_statement",
+                newer_body=None,
+            )
+            for i in items
+            if i.status == "superseded" and i.superseded_by
+        ]
         decision_ids = [i.id for i in items if i.type == "decision" and i.status != "superseded"]
         if not decision_ids:
-            return
-        rows = await self._db.fetch(_CONFLICT_SQL, decision_ids)
-        for row in rows:
-            older = by_id.get(row["older_id"])
-            if older is None:
-                continue
+            return found
+        for row in await self._db.fetch(_CONFLICT_SQL, decision_ids):
             older_lex = set(row["older_lex"] or [])
             shared = older_lex & set(row["lex"] or [])
             if not older_lex or not (
                 len(shared) >= 3 or (len(shared) >= 2 and len(shared) / len(older_lex) >= 0.5)
             ):
                 continue
-            if row["id"] not in older.conflicts_with:
-                older.conflicts_with.append(row["id"])
-            newer = by_id.get(row["id"])
-            if newer is not None and older.id not in newer.conflicts_with:
-                newer.conflicts_with.append(older.id)
-            if reports is not None:
-                reports.append(
-                    ConflictReport(
-                        kind="possible_conflict",
-                        ids=[older.id, row["id"]],
-                        newer=None if newer is not None else truncate_for_budget(row["body"], 40),
-                        newer_provenance=row["provenance"],
-                        advice=f"Newer {row['kind']} on the same subject; ask the user which stands.",
-                    )
+            found.append(
+                _Conflict(
+                    older=row["older_id"],
+                    newer=row["id"],
+                    kind="possible_conflict",
+                    newer_kind=row["kind"],
+                    newer_provenance=row["provenance"],
+                    newer_body=row["body"],
                 )
+            )
+        return found
+
+    @staticmethod
+    def _mark_conflicts(items: list[ContextItem], conflicts: list[_Conflict]) -> None:
+        """Point each item at the other side of its conflicts, when both are present."""
+        by_id = {i.id: i for i in items}
+        for conflict in conflicts:
+            if conflict.kind == "superseded":
+                continue  # carried by status and superseded_by
+            older, newer = by_id.get(conflict.older), by_id.get(conflict.newer)
+            if older is not None and conflict.newer not in older.conflicts_with:
+                older.conflicts_with.append(conflict.newer)
+            if older is not None and newer is not None and older.id not in newer.conflicts_with:
+                newer.conflicts_with.append(older.id)
 
     # ------------------------------------------------------------- recent
 
@@ -700,204 +730,236 @@ class RetrievalService:
         include_handoff: bool,
         notes: list[str] | None = None,
     ) -> ContextPackage:
+        """Gather candidates from every layer, then fill the budget by priority.
+
+        Priority: the newest session, the two best matches for the query (each
+        with the newer item that may overrule it), two open tasks, two
+        decisions, older sessions, then everything else. Items are then shown
+        in reading order: handoff, relevant, raw.
+        """
         notes = list(notes or [])
         parsed = parse(query)
-        budget = _Budget(token_budget, spent=_PACKAGE_OVERHEAD)
-        item_cap = max(60, min(_MAX_ITEM_TOKENS, token_budget // 4))
-        chosen: list[ContextItem] = []
-        seen: set[UUID] = set()
-        layers: list[LayerReport] = []
-        conflicts: list[ConflictReport] = []
-        left_out = 0
-
-        tiers: dict[UUID, int] = {}
         compact = token_budget < _COMPACT_BELOW
-
-        def take(items: list[ContextItem], layer: str, ceiling: int | None = None) -> int:
-            """Add what fits; skip what does not and keep going. Returns count added."""
-            nonlocal left_out
-            added = 0
-            for position, item in enumerate(items):
-                if item.id in seen:
-                    continue
-                # The package names the project once; a conversation id is kept
-                # where it leads somewhere (a session's transcript).
-                if focus is not None and item.project == focus.slug:
-                    item.project = None
-                if compact or item.type != "summary":
-                    item.provenance.conversation_id = None
-                item.estimated_tokens = _cost(item)
-                if not budget.fits(item.estimated_tokens, ceiling):
-                    left_out += 1
-                    continue
-                item.layer = layer
-                if layer == "raw":
-                    tiers[item.id] = _TIER_RAW
-                elif layer == "handoff":
-                    tiers[item.id] = _TIER_CORE if position < 7 else _TIER_HANDOFF_REST
-                else:
-                    tiers[item.id] = _TIER_RELEVANT_TOP if position < 3 else _TIER_RELEVANT_REST
-                chosen.append(item)
-                seen.add(item.id)
-                budget.take(item.estimated_tokens)
-                added += 1
-            return added
+        item_cap = max(60, min(_MAX_ITEM_TOKENS, token_budget // 6))
+        layers: list[LayerReport] = []
 
         # -- which project ------------------------------------------------
         rows = await self._project_rows()
         choice, focus, candidates = self._choose_project(project, parsed.text, rows)
 
-        # -- 1. handoff ---------------------------------------------------
-        handoff_items = 0
+        # -- 1. handoff candidates ---------------------------------------
+        handoffs: list[list[ContextItem]] = []
         if not include_handoff:
-            layers.append(
-                LayerReport(name="handoff", status="skipped", reason="topic packages skip it")
-            )
+            layers.append(LayerReport(name="handoff", status="skipped", reason="topic package"))
         elif focus is None and not candidates:
             layers.append(LayerReport(name="handoff", status="skipped", reason="no project"))
         else:
-            targets = [focus] if focus else candidates[:2]
-            short = focus is None
-            share = 1.0 if parsed.is_empty else 0.7
-            for target in targets:
-                ceiling = budget.spent + int(token_budget * share / len(targets))
-                items = await self._handoff(target, short=short, item_cap=item_cap, parsed=parsed)
-                handoff_items += take(items, "handoff", ceiling)
-            layers.append(
-                LayerReport(
-                    name="handoff",
-                    status="ran",
-                    reason=None if focus else "short handoff per candidate project",
-                    items=handoff_items,
+            for target in [focus] if focus else candidates[:2]:
+                handoffs.append(
+                    await self._handoff(
+                        target, short=focus is None, item_cap=item_cap, parsed=parsed
+                    )
                 )
-            )
+        handoff_ids = {i.id for h in handoffs for i in h}
 
-        # -- 2. relevant --------------------------------------------------
-        relevant = 0
-        if parsed.is_empty:
-            layers.append(
-                LayerReport(
-                    name="relevant",
-                    status="skipped",
-                    reason="no query terms",
-                )
-            )
-        else:
-            found = await self._search(
+        # -- 2. relevant candidates --------------------------------------
+        relevant: list[ContextItem] = []
+        if not parsed.is_empty:
+            relevant = await self._search(
                 parsed,
                 limit=12,
                 project=focus,
                 include_unscoped=focus is not None,
-                exclude=seen,
+                exclude=handoff_ids,
                 max_item_tokens=item_cap,
                 flag_conflicts=False,
             )
-            relevant = take(found, "relevant")
-            layers.append(
-                LayerReport(
-                    name="relevant",
-                    status="ran",
-                    items=relevant,
-                )
-            )
 
-        # -- 3. raw transcripts --------------------------------------------
-        if handoff_items or relevant:
-            layers.append(
-                LayerReport(
-                    name="raw_messages",
-                    status="skipped",
-                    reason="not needed",
-                )
-            )
-        elif parsed.is_empty:
-            layers.append(
-                LayerReport(name="raw_messages", status="skipped", reason="no query terms")
-            )
-        else:
-            raw = await self._search(
+        # -- 3. raw candidates, only when nothing else matched -----------
+        raw: list[ContextItem] = []
+        if not handoff_ids and not relevant and not parsed.is_empty:
+            found = await self._search(
                 parsed,
                 limit=4,
                 project=focus,
                 include_messages=True,
                 include_unscoped=focus is not None,
-                exclude=seen,
                 max_item_tokens=item_cap,
                 flag_conflicts=False,
             )
-            raw = [i for i in raw if i.type == "message"]
-            added = take(raw, "raw")
-            if added:
+            raw = [i for i in found if i.type == "message"]
+
+        for layer, group in (
+            ("handoff", [i for h in handoffs for i in h]),
+            ("relevant", relevant),
+            ("raw", raw),
+        ):
+            for item in group:
+                item.layer = layer
+                if focus is not None and item.project == focus.slug:
+                    item.project = None  # the package names it once
+                if compact or item.type != "summary":
+                    item.provenance.conversation_id = None
+                item.estimated_tokens = _cost(item)
+
+        everything = {i.id: i for h in handoffs for i in h} | {i.id: i for i in relevant + raw}
+        conflicts = await self._find_conflicts(list(everything.values()))
+        partners: dict[UUID, list[UUID]] = {}
+        for c in conflicts:
+            partners.setdefault(c.older, []).append(c.newer)
+            partners.setdefault(c.newer, []).append(c.older)
+
+        # -- fill by priority ----------------------------------------------
+        order: list[ContextItem] = []
+        for h in handoffs:
+            order += h[:1]  # newest session of each project
+        order += relevant[:2]
+        for h in handoffs:
+            order += h[1:5]  # two open tasks, two decisions
+        for h in handoffs:
+            order += h[5:]
+        order += relevant[2:] + raw
+
+        budget = _Budget(token_budget, spent=_PACKAGE_OVERHEAD)
+        chosen: dict[UUID, ContextItem] = {}
+        left_out = 0
+
+        def add(item: ContextItem) -> bool:
+            if item.id in chosen:
+                return True
+            if not budget.fits(item.estimated_tokens):
+                return False
+            chosen[item.id] = item
+            budget.take(item.estimated_tokens)
+            return True
+
+        for item in order:
+            if not add(item):
+                left_out += 1
+                continue
+            # The newer side of a conflict travels with the decision it may overrule.
+            for other in partners.get(item.id, []):
+                if other in everything:
+                    add(everything[other])
+
+        # -- conflict reports for what was chosen ----------------------------
+        reports: list[ConflictReport] = []
+        for c in sorted(
+            conflicts,
+            key=lambda c: (
+                c.kind != "superseded",
+                not (c.older in chosen and c.newer in chosen),
+                c.newer_provenance != "user_statement",
+            ),
+        ):
+            if c.older not in chosen and c.newer not in chosen:
+                continue
+            if len(reports) == _MAX_CONFLICT_REPORTS:
+                break
+            older_text = None
+            if c.older not in chosen and c.older in everything:
+                older_text = truncate_for_budget(everything[c.older].content, 40)
+            newer_text = None
+            if c.newer not in chosen:
+                body = everything[c.newer].content if c.newer in everything else c.newer_body
+                newer_text = truncate_for_budget(body, 40) if body else "see superseded_by"
+            reports.append(
+                ConflictReport(
+                    kind=c.kind,
+                    ids=[c.older, c.newer],
+                    older=older_text,
+                    newer=newer_text,
+                    newer_provenance=c.newer_provenance,
+                    advice=(
+                        "Replaced; use the newer decision."
+                        if c.kind == "superseded"
+                        else f"Newer {c.newer_kind} on the same subject; ask the user which stands."
+                    ),
+                )
+            )
+        shown = [i for i in order if i.id in chosen]
+        self._mark_conflicts(
+            shown,
+            [c for c in conflicts if any(r.ids == [c.older, c.newer] for r in reports)],
+        )
+
+        # -- reading order and layer report ----------------------------------
+        rank = {"handoff": 0, "relevant": 1, "raw": 2}
+        position = {
+            i.id: n for n, i in enumerate([*(i for h in handoffs for i in h), *relevant, *raw])
+        }
+        items = sorted(shown, key=lambda i: (rank[i.layer or "relevant"], position[i.id]))
+        counts = {name: sum(1 for i in items if i.layer == name) for name in rank}
+
+        if handoffs:
+            layers.append(
+                LayerReport(
+                    name="handoff",
+                    status="ran",
+                    reason=None if focus else "short handoff per candidate project",
+                    items=counts["handoff"] or None,
+                )
+            )
+        if parsed.is_empty:
+            layers.append(LayerReport(name="relevant", status="skipped", reason="no query terms"))
+        else:
+            layers.append(
+                LayerReport(name="relevant", status="ran", items=counts["relevant"] or None)
+            )
+        if raw or (not handoff_ids and not relevant and not parsed.is_empty):
+            layers.append(
+                LayerReport(name="raw_messages", status="ran", items=counts["raw"] or None)
+            )
+            if counts["raw"]:
                 notes.append(
                     "Included raw message excerpts because nothing structured matched. "
                     "These are verbatim transcript fragments."
                 )
+        else:
             layers.append(
                 LayerReport(
                     name="raw_messages",
-                    status="ran",
-                    items=added,
+                    status="skipped",
+                    reason="not needed" if (handoff_ids or relevant) else "no query terms",
                 )
             )
-
-        await self._flag_conflicts(chosen, conflicts)
-
-        if left_out:
-            notes.append(f"{left_out} more items did not fit token_budget.")
-        if not chosen:
-            notes.append(_NOTHING_MATCHED)
-
-        layers_used = []
-        for item in chosen:
-            name = {"handoff": "handoff", "relevant": "relevant", "raw": "raw_messages"}[
-                item.layer or "relevant"
-            ]
-            if name not in layers_used:
-                layers_used.append(name)
-
-        for layer_report in layers:
-            layer_report.items = layer_report.items or None
         if compact:
             # layers_used already names the layers that returned items.
             layers = [r for r in layers if r.status == "skipped" or not r.items]
+
+        if left_out:
+            notes.append(f"{left_out} more items did not fit token_budget.")
+        if not items:
+            notes.append(_NOTHING_MATCHED)
+
         package = ContextPackage(
             query=truncate_for_budget(query, 60),
-            items=chosen,
+            items=items,
             token_budget=token_budget,
             estimated_tokens=0,
-            layers_used=layers_used,
+            layers_used=[{"raw": "raw_messages"}.get(name, name) for name in rank if counts[name]],
             truncated=left_out > 0,
             notes=notes,
             keywords=parsed.keywords,
             project=choice,
             layers=layers,
-            conflicts=conflicts,
+            conflicts=reports,
         )
-        # The budget covers the whole result as sent, not just item text.
-        # Measure it, and drop from the end (least important first) until it fits.
-        # A conflict pair is only useful together: both sides get the more
-        # important tier of the two.
-        for report in conflicts:
-            pair = [i for i in report.ids if i in tiers]
-            if len(pair) == 2:
-                tier = min(tiers[pair[0]], tiers[pair[1]])
-                tiers[pair[0]] = tiers[pair[1]] = tier
+        # The budget covers the whole result as sent. If the estimate above was
+        # short, drop the lowest-priority items until it fits.
         size = _wire_tokens(package)
+        priority = {i.id: n for n, i in enumerate(order)}
         while size > token_budget and package.items:
-            # Least important tier first; within a tier, the last one added.
-            worst = max(
-                range(len(package.items)),
-                key=lambda i: (tiers.get(package.items[i].id, _TIER_RAW), i),
-            )
-            dropped = package.items.pop(worst)
-            kept: list[ConflictReport] = []
+            worst = max(package.items, key=lambda i: priority.get(i.id, len(order)))
+            package.items.remove(worst)
             for report in package.conflicts:
-                if report.ids[0] == dropped.id:
-                    continue  # the older item is gone, so is the warning about it
-                if report.ids[-1] == dropped.id and report.newer is None:
-                    report.newer = truncate_for_budget(dropped.content, 40)
-                kept.append(report)
-            package.conflicts = kept
+                if report.ids[0] == worst.id and report.older is None:
+                    report.older = truncate_for_budget(worst.content, 40)
+                if report.ids[-1] == worst.id and report.newer is None:
+                    report.newer = truncate_for_budget(worst.content, 40)
+            for kept_item in package.items:
+                if worst.id in kept_item.conflicts_with:
+                    kept_item.conflicts_with.remove(worst.id)
             package.truncated = True
             size = _wire_tokens(package)
         package.estimated_tokens = size
@@ -1014,5 +1076,5 @@ class RetrievalService:
             decisions.sort(key=lambda i: not mentions(i))
         # Newest session first; then what is open; then what was decided. Older
         # sessions come after, so a tight budget still gets the latest of each.
-        ordered = summaries[:1] + tasks[:3] + decisions[:3] + summaries[1:] + tasks[3:]
-        return ordered + decisions[3:]
+        ordered = summaries[:1] + tasks[:2] + decisions[:2] + summaries[1:] + tasks[2:]
+        return ordered + decisions[2:]

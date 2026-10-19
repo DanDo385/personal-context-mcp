@@ -153,7 +153,8 @@ class ConflictReport(Base):
     kind: Literal["superseded", "possible_conflict"]
     #: Older first, newer second.
     ids: list[UUID]
-    #: The newer item's text, only when it is not already among the items.
+    #: Each side's text, only when that item is not among the items.
+    older: str | None = None
     newer: str | None = None
     newer_provenance: str
     advice: str
