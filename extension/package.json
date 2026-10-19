@@ -1,0 +1,18 @@
+{
+  "name": "personal-context-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension that captures AI chat sessions into Personal Context",
+  "scripts": {
+    "dev": "echo 'Build in watch mode: use esbuild --watch' && esbuild src/content.js --bundle --outfile=content.js --watch",
+    "build": "mkdir -p dist && cp manifest.json dist/ && cp -r popup sidepanel providers lib icons dist/ && echo 'Build complete'",
+    "package": "npm run build && cd dist && zip -r ../personal-context-extension.zip .",
+    "test": "node --test tests/unit/*.test.js",
+    "check-sites": "node tests/breakage/run-all.js",
+    "perf": "node tests/performance/run-perf.js",
+    "backfill": "node scripts/backfill.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

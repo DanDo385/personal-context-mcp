@@ -1,0 +1,25 @@
+{
+  "provider": "gemini",
+  "provider_conversation_id": "gemini-test-conv-001",
+  "title": "Machine learning basics",
+  "model": null,
+  "created_at": null,
+  "updated_at": null,
+  "messages": [
+    {
+      "provider_message_id": "gemini-msg-001",
+      "role": "user",
+      "content": "What is the difference between supervised and unsupervised learning?",
+      "created_at": null,
+      "model": null
+    },
+    {
+      "provider_message_id": "gemini-msg-002",
+      "role": "assistant",
+      "content": "Supervised learning uses labeled training data (input-output pairs) to learn a mapping function. Examples: classification, regression. Unsupervised learning finds patterns in unlabeled data. Examples: clustering, dimensionality reduction, anomaly detection. Semi-supervised learning combines both approaches when only some data is labeled.",
+      "created_at": null,
+      "model": null
+    }
+  ],
+  "attachments": []
+}

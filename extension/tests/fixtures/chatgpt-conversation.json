@@ -1,0 +1,25 @@
+{
+  "provider": "chatgpt",
+  "provider_conversation_id": "chatgpt-test-conv-001",
+  "title": "Python async patterns",
+  "model": "gpt-4o",
+  "created_at": "2026-10-14T14:00:00Z",
+  "updated_at": "2026-10-14T14:20:00Z",
+  "messages": [
+    {
+      "provider_message_id": "chatgpt-msg-001",
+      "role": "user",
+      "content": "What's the difference between asyncio.gather and asyncio.as_completed?",
+      "created_at": "2026-10-14T14:00:00Z",
+      "model": null
+    },
+    {
+      "provider_message_id": "chatgpt-msg-002",
+      "role": "assistant",
+      "content": "`asyncio.gather` runs all coroutines concurrently and returns results in the same order as the input, once all are complete. `asyncio.as_completed` yields results as each coroutine finishes, in completion order. Use `gather` when you need all results before proceeding; use `as_completed` for streaming partial results.",
+      "created_at": "2026-10-14T14:00:03Z",
+      "model": "gpt-4o"
+    }
+  ],
+  "attachments": []
+}

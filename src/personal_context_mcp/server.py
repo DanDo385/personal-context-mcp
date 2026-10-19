@@ -42,6 +42,7 @@ from personal_context_mcp.auth.provider import build_auth_provider
 from personal_context_mcp.auth.ratelimit import RateLimitMiddleware
 from personal_context_mcp.config import Settings, get_settings
 from personal_context_mcp.db.pool import Database, set_database
+from personal_context_mcp.ingest import build_ingest_routes
 from personal_context_mcp.logging_setup import (
     configure_logging,
     get_logger,
@@ -488,6 +489,7 @@ def _build_routes(settings: Settings, mcp_app: Any) -> list[Route | Mount]:
         Route("/worker/edits", worker_route(worker_api.push_edits), methods=["POST"]),
         Route("/artifacts/download", local_download, methods=["GET"]),
         Route("/artifacts/upload", local_upload, methods=["PUT", "POST"]),
+        *build_ingest_routes(settings),
         # The MCP app owns its own path plus the /.well-known OAuth metadata.
         Mount("/", app=mcp_app),
     ]

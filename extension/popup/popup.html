@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Personal Context</title>
+  <style>
+    body { width: 280px; font-family: system-ui, sans-serif; font-size: 13px; margin: 0; padding: 12px; }
+    h2 { margin: 0 0 8px; font-size: 14px; }
+    .provider { margin: 8px 0; padding: 8px; border-radius: 6px; background: #f5f5f5; }
+    .provider-name { font-weight: 600; }
+    .provider-status { font-size: 11px; color: #666; margin-top: 2px; }
+    .error { color: #d32f2f; }
+    .success { color: #2e7d32; }
+    .controls { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+    button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .pause-btn { background: #ff9800; color: white; }
+    .pause-btn.paused { background: #4caf50; }
+    .capture-btn { background: #5b3f87; color: white; }
+    .dead-letter { margin-top: 8px; font-size: 11px; color: #d32f2f; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h2>Personal Context</h2>
+
+  <div id="providers"></div>
+
+  <div class="controls">
+    <button id="pauseBtn" class="pause-btn">Pause</button>
+    <button id="captureBtn" class="capture-btn">Save Now</button>
+  </div>
+
+  <div id="deadLetter" class="dead-letter hidden"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

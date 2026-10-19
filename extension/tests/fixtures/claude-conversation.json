@@ -1,0 +1,25 @@
+{
+  "provider": "claude",
+  "provider_conversation_id": "claude-test-conv-001",
+  "title": "Test conversation about Rust lifetimes",
+  "model": "claude-sonnet-4-5-20250929",
+  "created_at": "2026-10-15T10:00:00Z",
+  "updated_at": "2026-10-15T11:30:00Z",
+  "messages": [
+    {
+      "provider_message_id": "msg-user-001",
+      "role": "user",
+      "content": "Can you explain Rust lifetimes with an example?",
+      "created_at": "2026-10-15T10:00:00Z",
+      "model": null
+    },
+    {
+      "provider_message_id": "msg-assistant-001",
+      "role": "assistant",
+      "content": "Rust lifetimes are a way for the compiler to ensure references are valid. Here's a simple example:\n\n```rust\nfn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() { x } else { y }\n}\n```\n\nThe `'a` lifetime parameter tells the compiler that the returned reference lives as long as both inputs.",
+      "created_at": "2026-10-15T10:00:05Z",
+      "model": "claude-sonnet-4-5-20250929"
+    }
+  ],
+  "attachments": []
+}

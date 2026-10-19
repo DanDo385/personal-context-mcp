@@ -1,0 +1,25 @@
+{
+  "provider": "grok",
+  "provider_conversation_id": "grok-test-conv-001",
+  "title": "Browser extension performance",
+  "model": null,
+  "created_at": null,
+  "updated_at": null,
+  "messages": [
+    {
+      "provider_message_id": "grok-msg-001",
+      "role": "user",
+      "content": "How do I measure Interaction to Next Paint in a Chrome extension?",
+      "created_at": null,
+      "model": null
+    },
+    {
+      "provider_message_id": "grok-msg-002",
+      "role": "assistant",
+      "content": "Use the Chrome DevTools Protocol Performance API. Enable the Performance domain, start tracing, perform your interactions, then stop and analyze the trace events. Look for 'InteractiveTiming' events or compute INP by measuring the time from user input (pointerdown, keydown) to the next paint event.",
+      "created_at": null,
+      "model": null
+    }
+  ],
+  "attachments": []
+}
