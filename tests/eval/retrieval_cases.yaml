@@ -1,0 +1,279 @@
+# Retrieval eval cases over the synthetic fixture in fixture.py.
+#
+# Each case calls one read tool and states what must come back, by fixture key.
+# The cases describe behavior a user would notice, not how the server does it,
+# so they can be pointed at another tool (for example a future `start`) by
+# changing only the adapter in harness.py.
+#
+#   tool:      search (context_search) or bootstrap (context_bootstrap)
+#   args:      tool arguments. "$id:<key>" is replaced by that item's id.
+#   expect:
+#     include:      every key must appear (search: in the top 5; bootstrap: anywhere)
+#     include_any:  at least one key must appear
+#     exclude:      no key may appear as a live item (a superseded marker is allowed
+#                   only where `superseded` names it)
+#     order:        keys that must appear in this relative order
+#     first:        the key ranked first
+#     empty:        true when nothing should come back
+#     project:      the project the bootstrap package says it used or inferred
+#     candidates:   projects a bootstrap must offer when the project is ambiguous
+#     superseded:   keys that may appear only when marked superseded
+#     conflict:     keys that must be marked as in conflict with something newer
+#     provenance:   {key: kind} the provenance kind each item must carry
+#     max_tokens:   ceiling on the returned package's own token estimate
+#     note:         substring that must appear in the package notes
+
+cases:
+  # ----------------------------------------------------- ordinary questions
+  - id: natural-question
+    category: long-question
+    tool: search
+    args: {query: "what did I decide about open-sourcing harbor notes"}
+    expect: {include: [d_hn_alone, s_hn_opensource]}
+
+  - id: long-question
+    category: long-question
+    tool: search
+    args:
+      query: >-
+        Can you remind me how we decided Harbor Notes should handle sync conflicts
+        between my phone and my laptop when both edit the same note?
+    expect: {include: [s_hn_sync]}
+
+  - id: preference-question
+    category: long-question
+    tool: search
+    args: {query: "how does Sam like things explained"}
+    expect: {include: [m_pref_plain]}
+
+  - id: espresso
+    category: long-question
+    tool: search
+    args: {query: "what grinder setting do I use"}
+    expect: {include: [m_espresso]}
+
+  # ---------------------------------------------------------- exact ids
+  - id: exact-uuid
+    category: exact-id
+    tool: search
+    args: {query: "$id:d_lh_rate"}
+    expect: {first: d_lh_rate}
+
+  - id: ticket-id
+    category: exact-id
+    tool: search
+    args: {query: "LH-142"}
+    expect: {first: d_lh_rate}
+
+  # ------------------------------------------------- hyphens and spelling
+  - id: hyphenated-term
+    category: hyphen
+    tool: search
+    args: {query: "last-writer-wins"}
+    expect: {include: [n_crdt, s_hn_sync]}
+
+  - id: hyphen-written-apart
+    category: hyphen
+    tool: search
+    args: {query: "open source"}
+    expect: {include: [s_hn_opensource, d_hn_alone]}
+
+  - id: plural-misspelling
+    category: misspelling
+    tool: search
+    args: {query: "tomatos raised bed"}
+    expect: {include: [d_gp_beds]}
+
+  - id: misspelled-word
+    category: misspelling
+    tool: search
+    args: {query: "postgress storage"}
+    expect: {include: [d_hn_postgres]}
+
+  - id: project-alias-filter
+    category: alias
+    tool: search
+    args: {query: "deploy server", project: "harbor"}
+    expect: {first: d_hn_render}
+
+  - id: misspelled-project-filter
+    category: misspelling
+    tool: search
+    args: {query: "deploy server", project: "harbr notes"}
+    expect: {first: d_hn_render}
+
+  # ------------------------------------------------- negation and phrases
+  - id: negation
+    category: negation
+    tool: search
+    args: {query: "who lives where -Lisbon"}
+    expect: {include: [m_brother], exclude: [m_sister]}
+
+  - id: quoted-phrase
+    category: negation
+    tool: search
+    args: {query: '"raised beds"'}
+    expect: {include: [d_gp_beds], exclude: [n_companion, s_gp_seeds]}
+
+  # ----------------------------------------------------------- no result
+  - id: no-result
+    category: no-result
+    tool: search
+    args: {query: "quantum chromodynamics lecture notes"}
+    expect: {empty: true}
+
+  - id: no-result-single-word
+    category: no-result
+    tool: search
+    args: {query: "lemurs"}
+    expect: {empty: true}
+
+  - id: raw-messages-not-by-default
+    category: no-result
+    tool: search
+    args: {query: "zebrafish thermometer"}
+    expect: {empty: true}
+
+  - id: raw-messages-on-request
+    category: raw
+    tool: search
+    args: {query: "zebrafish thermometer", include_messages: true}
+    expect: {include_any: [m_zebra_user, m_zebra_reply]}
+
+  # ---------------------------------------------------- project boundaries
+  - id: boundary-tax
+    category: project-boundary
+    tool: search
+    args: {query: "quarterly tax estimate", project: "harbor-notes"}
+    expect: {exclude: [s_al_tax], empty: true}
+
+  - id: boundary-push
+    category: project-boundary
+    tool: search
+    args: {query: "push notifications", project: "atlas-ledger"}
+    expect: {exclude: [s_am_push]}
+
+  # ---------------------------------------- latest versus superseded, who said it
+  - id: latest-deploy-decision
+    category: superseded
+    tool: search
+    args: {query: "where do we deploy the harbor notes server"}
+    expect: {first: d_hn_render, superseded: [d_hn_fly]}
+
+  - id: superseded-storage-decision
+    category: superseded
+    tool: search
+    args: {query: "harbor notes data storage database"}
+    expect: {include: [d_hn_postgres], superseded: [d_hn_sqlite]}
+
+  - id: newer-assistant-summary-is-a-conflict
+    category: superseded
+    tool: search
+    args: {query: "open source harbor notes v2"}
+    expect: {include: [d_hn_alone, s_hn_opensource], conflict: [d_hn_alone]}
+
+  - id: user-words-above-imported-text
+    category: provenance
+    tool: search
+    args: {query: "harbor notes sync conflicts phone laptop"}
+    expect: {order: [s_hn_sync, m_hn_import]}
+
+  - id: assistant-decision-keeps-provenance
+    category: provenance
+    tool: search
+    args: {query: "compact the sync log"}
+    expect: {include: [d_hn_cron], provenance: {d_hn_cron: assistant_generated}}
+
+  - id: research-provenance
+    category: provenance
+    tool: search
+    args: {query: "CRDT"}
+    expect: {first: n_crdt, provenance: {n_crdt: external_source}}
+
+  # ------------------------------------------------------------- lists
+  - id: list-by-name
+    category: list
+    tool: search
+    args: {query: "reading list"}
+    expect: {include_any: [r_ddia, r_pragprog]}
+
+  - id: list-item
+    category: list
+    tool: search
+    args: {query: "oat milk"}
+    expect: {first: g_oat}
+
+  # ------------------------------------------------------------ bootstrap
+  - id: handoff-explicit-project
+    category: handoff
+    tool: bootstrap
+    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 1200}
+    expect:
+      project: harbor-notes
+      include: [s_hn_untagged, s_hn_sync, s_hn_opensource, t_hn_guide, t_hn_tomb, d_hn_render, d_hn_postgres]
+      exclude: [t_hn_host, s_noise_soup, s_al_tax]
+      superseded: [d_hn_sqlite, d_hn_fly]
+
+  - id: handoff-open-source-conflict
+    category: superseded
+    tool: bootstrap
+    args: {query: "open source", project: "harbor-notes"}
+    expect: {include: [d_hn_alone, s_hn_opensource], conflict: [d_hn_alone]}
+
+  - id: infer-loose-name
+    category: alias
+    tool: bootstrap
+    args: {query: "what is next for harbor notes"}
+    expect: {project: harbor-notes, include: [s_hn_sync, t_hn_guide]}
+
+  - id: infer-worktree-path
+    category: alias
+    tool: bootstrap
+    args: {query: "tests failing in ~/Code/worktrees/harbor-notes/fix-search"}
+    expect: {project: harbor-notes, include: [s_hn_untagged]}
+
+  - id: infer-misspelled-name
+    category: misspelling
+    tool: bootstrap
+    args: {query: "harbr notes status"}
+    expect: {project: harbor-notes}
+
+  - id: infer-alias
+    category: alias
+    tool: bootstrap
+    args: {query: "lh api rate limit"}
+    expect: {project: lighthouse-api, include: [d_lh_rate]}
+
+  - id: ambiguous-project
+    category: project-boundary
+    tool: bootstrap
+    args: {query: "atlas status"}
+    expect: {candidates: [atlas-ledger, atlas-mobile], include: [s_al_tax, s_am_push]}
+
+  - id: tight-budget
+    category: budget
+    tool: bootstrap
+    args: {query: "where did we leave off", project: "harbor-notes", token_budget: 200}
+    expect: {include_any: [s_hn_untagged, s_hn_sync], max_tokens: 200}
+
+  - id: unrelated-question
+    category: no-result
+    tool: bootstrap
+    args: {query: "a good name for a cat"}
+    expect: {empty: true, note: "do not assume prior context"}
+
+  - id: deprecated-pasted-prompt
+    category: long-question
+    tool: bootstrap
+    args:
+      user_message: >-
+        Hi! I hope you're well. I've been thinking a lot lately and wanted to ask you
+        something about the Harbor Notes app: where are we deploying the server these
+        days, and is anything still open there? Thanks so much!
+    expect: {project: harbor-notes, include: [d_hn_render, t_hn_guide]}
+
+  - id: raw-fallback
+    category: raw
+    tool: bootstrap
+    args: {query: "zebrafish thermometer"}
+    expect: {include_any: [m_zebra_user, m_zebra_reply]}
