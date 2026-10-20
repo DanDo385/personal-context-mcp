@@ -22,7 +22,7 @@ flowchart TB
     EDGE[["Public HTTPS edge<br/>Cloud Run"]] --> MCP
 
     subgraph Service["personal-context-mcp"]
-        MCP[MCP tool surface<br/>48 tools]
+        MCP[MCP tool surface]
         RULES[Deterministic rules]
         POLICY[Confidence policy engine]
         MCP --> RULES --> JEV[TypeSafe Jev<br/>System One classifier]
@@ -170,10 +170,11 @@ Three rules that follow from this, and that the code enforces:
 personal-context-mcp/
 ├── migrations/               # numbered SQL, applied once, hash-checked
 ├── instructions/             # per-provider setup + the shared instruction
-├── skills/                   # 8 portable workflow skills
+├── skills/                   # portable workflows, including search/save/email/vault
 ├── scripts/                  # per-provider import wrappers
 ├── src/personal_context_mcp/
 │   ├── config.py             # settings + startup refusals
+│   ├── email.py              # immutable previews, AgentMail adapter, durable receipts
 │   ├── server.py             # Starlette app, routes, lifespan
 │   ├── services.py           # explicit service wiring
 │   ├── models.py             # the shapes that cross the MCP boundary
@@ -193,6 +194,31 @@ personal-context-mcp/
 ├── src/obsidian_sync/        # the local worker
 └── tests/
 ```
+
+The named `search`, `save`, `email` and `vault` prompts load the same workflow
+text as the app skills. Search reuses `context_search`; save reuses
+`session_checkpoint`; vault reuses `note_write` through `notes/write.py`,
+including canonical list views rather than copies of list text.
+
+Homes and `concept/*` tags live in object metadata. `homes.py` validates one
+logical home, and `VaultPaths.home_note` maps it onto configured numbered
+roots. Defaults come from an existing project or `other`; the calling model
+selects lesson/tool homes and concept names explicitly. Existing files are
+not bulk-moved. The queue reports waiting, acknowledged and failure states
+separately. Repeated appends use content hashes, and identical queued note
+versions reuse their job or acknowledgement.
+
+`email_drafts` stores a user-owned immutable preview, its content-bound
+confirmation, delivery start time and final receipt. `email:send` gates the
+single `email` tool. Draft preparation makes no external call. After user
+confirmation, immediate delivery sends that exact preview through AgentMail's
+HTTP API with an `Idempotency-Key`; scheduled delivery creates a native
+scheduled draft with a stable `client_id`. Row locks serialize concurrent
+attempts. Local receipts survive the provider's 24-hour send-key retention;
+uncertain sends stop retrying after 23 hours. Dry runs never contact AgentMail.
+There is no incoming-mail agent or automatic reply workflow. Email and replies
+are untrusted data, and configured no-external sensitivity levels are blocked
+before delivery.
 
 ---
 
@@ -929,7 +955,7 @@ real HTTP server, and a real filesystem vault - not mocked.
 | `ruff check` | clean |
 | `mypy src` | clean, 77 files |
 | Migrations | applied from scratch on a virgin database |
-| MCP surface | 48 tools over Streamable HTTP, authenticated |
+| MCP surface | Domain tools over Streamable HTTP, authenticated |
 
 The full vertical slice, end to end over HTTP:
 

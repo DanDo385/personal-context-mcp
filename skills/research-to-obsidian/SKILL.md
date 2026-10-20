@@ -32,10 +32,10 @@ duplicates them into a second place that can drift.
    updates that note and bumps its version. Pass `append=true` to add a new
    section rather than replace the body.
 
-3. **Let the classifier choose the section** by leaving `note_class` unset,
-   unless the user was explicit. It routes to project / research / wiki /
-   concept / resource / daily / inbox, and falls back to inbox when genuinely
-   ambiguous rather than guessing.
+3. **Choose one logical home** in `home`: `projects/{existing-project-slug}`,
+   `lesson/{category}`, `setup/{tool}` or `other`. Pass concept names in
+   `concepts` for `concept/{name}` tags. Leave the legacy `note_class` unset
+   unless the user specifies it; it does not determine the new home folder.
 
 4. **Preserve citations.** Pass `citations` as `[{"title": ..., "url": ...}]`.
    Research without sources is much less useful six months later.
@@ -45,10 +45,10 @@ duplicates them into a second place that can drift.
    it being written to the vault and stops it being sent to the external
    classifier.
 
-6. **Report queued, not written.** The note is stored canonically in the
-   database immediately. The vault copy appears only when the user's local
-   sync worker next runs. `sync_status` will tell you whether that worker is
-   alive if the user asks where their file is.
+6. **Report the actual vault status.** `queued` means waiting for the local
+   worker; `written` means it acknowledged this version. Say "queued" or
+   "already written" plainly. Other statuses do not prove the file exists.
+   Use `sync_status` if the user asks where their file is.
 
 ## Safeguards
 
@@ -61,8 +61,9 @@ duplicates them into a second place that can drift.
 
 ## Failure behaviour
 
-If `note_write` reports `queued_for_vault: false`, say why - sensitivity, or
-the vault being disabled - rather than implying the file exists.
+If `note_write` reports `vault_status` other than `queued` or `written`, say
+why rather than implying the file exists. A canonical list uses `list_ref`
+with empty content; do not turn a two-way list into a prose note.
 
 ## Example
 
@@ -71,6 +72,8 @@ the vault being disabled - rather than implying the file exists.
 ```
 note_write(
   title="MCP OAuth support across providers",
+  home="lesson/mcp",
+  concepts=["oauth", "mcp"],
   content="## Summary\n\nGrok requires Dynamic Client Registration...\n",
   citations=[
     {"title": "MCP Authorization spec", "url": "https://modelcontextprotocol.io/..."},
@@ -79,4 +82,4 @@ note_write(
 )
 ```
 → "Written as a research note and queued for your vault at
-30-Research/mcp-oauth-support-across-providers.md."
+30-Research/Lessons/mcp/mcp-oauth-support-across-providers.md."

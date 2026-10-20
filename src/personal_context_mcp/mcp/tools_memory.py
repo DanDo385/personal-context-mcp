@@ -11,6 +11,7 @@ from pydantic import Field
 
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.auth.principal import current_principal
+from personal_context_mcp.homes import Home
 from personal_context_mcp.models import (
     CheckpointArtifactRef,
     CheckpointDecision,
@@ -177,7 +178,10 @@ def register(mcp: FastMCP) -> None:
     )
     async def session_checkpoint(
         provider: Annotated[
-            str, Field(description="Which app you are: chatgpt, claude, gemini or grok.")
+            str,
+            Field(
+                description="Which app or harness you are: chatgpt, claude, gemini, grok or codex."
+            ),
         ],
         provider_conversation_id: Annotated[
             str | None,
@@ -259,6 +263,24 @@ def register(mcp: FastMCP) -> None:
         sensitivity: Annotated[
             str, Field(description="normal, private or highly_sensitive.")
         ] = "normal",
+        home: Annotated[
+            Home | None,
+            Field(
+                description="One home: projects/{slug}, lesson/{category}, setup/{tool}, or other. Select the main subject, even if several concepts are covered."
+            ),
+        ] = None,
+        concepts: Annotated[
+            list[str] | None,
+            Field(
+                description="Concept names covered in the session. Stored as concept/{name} tags; omit to keep existing tags."
+            ),
+        ] = None,
+        queue_for_vault: Annotated[
+            bool,
+            Field(
+                description="Allow classifier-approved vault promotion. Set false to save shared memory only; use note_write for an explicitly requested vault summary."
+            ),
+        ] = True,
     ) -> CheckpointResult:
         """Persist everything durable this session established, in one call.
 
@@ -292,6 +314,9 @@ def register(mcp: FastMCP) -> None:
             important_context=important_context,
             model=model,
             sensitivity=sensitivity,
+            home=home,
+            concepts=concepts,
+            queue_for_vault=queue_for_vault,
         )
 
     @mcp.tool(

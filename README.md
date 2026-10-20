@@ -113,7 +113,7 @@ know are explained in the [Glossary](docs/glossary.md).
 
 ## What the AI apps can do with it
 
-Once connected, each app gets tools like these (48 in total). It uses them on its own when your
+Once connected, each app gets tools like these. It uses them on its own when your
 request needs them, and you can also ask for them directly.
 
 | You say... | What happens |
@@ -123,10 +123,17 @@ request needs them, and you can also ask for them directly.
 | "Add oat milk to my shopping list." | Updates your real list, visible everywhere and in Obsidian. |
 | "Save this chart to my research project." | Stores the file itself, not just its name, in your storage. |
 | "Where did we leave the website redesign?" | Pulls the project's status, decisions and open tasks. |
+| "Search my memory for Neovim." | Searches with a short query chosen from the topic. |
+| "Save this." | Saves the session with one home and concept tags. |
+| "Email this to reader@example.com." | Shows a draft, then sends only after you confirm. Optional AgentMail setup required for real mail. |
+| "Send this to my vault." | Queues a note, summary or two-way list and reports whether the worker has written it. |
 | *(at the end of a useful chat)* | The app saves what was decided, in one step, without duplicates. |
 
 The same abilities are packaged as [skills](skills/) for apps that support them, and a
 [short custom instruction](instructions/shared.md) teaches every app when to use them.
+The named actions are `search`, `save`, `email` and `vault`, also available as MCP prompts
+for clients that show slash commands. See [daily use](docs/guides/12-daily-use.md) for
+email setup, draft confirmation and vault folder mapping.
 
 ---
 

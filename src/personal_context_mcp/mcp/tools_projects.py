@@ -10,10 +10,9 @@ from pydantic import Field
 
 from personal_context_mcp.auth import scopes
 from personal_context_mcp.auth.principal import current_principal
-from personal_context_mcp.classifier.policy import Verdict
+from personal_context_mcp.homes import Home
 from personal_context_mcp.models import NoteRecord, ProjectRecord, WritableNoteClass
 from personal_context_mcp.services import get_services
-from personal_context_mcp.util import sha256_text
 
 
 def register(mcp: FastMCP) -> None:
@@ -210,7 +209,10 @@ def register(mcp: FastMCP) -> None:
     )
     async def note_write(
         title: Annotated[str, Field(description="Note title. Reusing a title updates that note.")],
-        content: Annotated[str, Field(description="The note body, in Markdown.")],
+        content: Annotated[
+            str,
+            Field(description="The note body, in Markdown. Leave empty for a canonical list view."),
+        ] = "",
         note_class: Annotated[
             WritableNoteClass | None,
             Field(
@@ -241,6 +243,24 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = True,
+        home: Annotated[
+            Home | None,
+            Field(
+                description="One home: projects/{slug}, lesson/{category}, setup/{tool}, or other. Reuse an existing home unless explicitly changing it."
+            ),
+        ] = None,
+        concepts: Annotated[
+            list[str] | None,
+            Field(
+                description="Concept names covered by this note; stored as concept/{name} tags. Omit to keep existing tags."
+            ),
+        ] = None,
+        list_ref: Annotated[
+            str | None,
+            Field(
+                description="For a two-way list view, the existing list's ID or slug from list_search. Leave content empty; never copy list items as prose."
+            ),
+        ] = None,
     ) -> dict:
         """Write durable research or knowledge as a note.
 
@@ -249,96 +269,17 @@ def register(mcp: FastMCP) -> None:
         written: this service has no access to their filesystem, and the write
         only lands when their local worker next polls.
         """
-        services = get_services()
-        principal = current_principal()
-        project_id = await services.projects.resolve(project)
-
-        classification = None
-        destination: str | None = note_class
-        if destination is None:
-            state = {
-                "title": title,
-                "content": content,
-                "existing_similar_notes": await services.notes.similar_titles(title),
-                "stated_project": project,
-                "sensitivity": sensitivity,
-            }
-            _, routing, event_id = await services.classification.classify_note(state)
-            destination = routing.destination or "inbox"
-            if routing.sensitive is Verdict.YES:
-                sensitivity = "private"
-            classification = routing.as_json()
-            if project_id is None and routing.project_slug:
-                project_id = await services.projects.resolve(routing.project_slug)
-        else:
-            event_id = None
-
-        note_id, created, version = await services.notes.upsert(
+        return await get_services().note_writer.write(
+            principal=current_principal(),
             title=title,
             content=content,
-            note_class=destination,
-            project_id=project_id,
-            sensitivity=sensitivity,
+            note_class=note_class,
+            project=project,
             citations=citations,
-            source_provider=principal.provider if principal.provider != "unknown" else None,
-            provenance="assistant_generated",
             append=append,
+            sensitivity=sensitivity,
+            queue_for_vault=queue_for_vault,
+            home=home,
+            concepts=concepts,
+            list_ref=list_ref,
         )
-
-        queued = False
-        vault_path = None
-        if queue_for_vault and services.settings.obsidian_enabled and sensitivity == "normal":
-            project_slug = None
-            if project_id:
-                project_slug = await services.db.fetchval(
-                    "SELECT slug FROM projects WHERE id = $1", project_id
-                )
-            vault_path = services.vault_paths.note(
-                note_class=destination, title=title, project_slug=project_slug
-            )
-            await services.db.execute(
-                "UPDATE notes SET vault_path = coalesce(vault_path, $2) WHERE id = $1",
-                note_id,
-                vault_path,
-            )
-            record = await services.notes.get(str(note_id))
-            queued = bool(
-                await services.sync_queue.enqueue(
-                    job_type="write_note",
-                    object_type="note",
-                    object_id=note_id,
-                    vault_path=vault_path,
-                    payload={"note_id": str(note_id), "version": version},
-                    content_sha256=sha256_text(record.content or content),
-                    source_provider=(
-                        principal.provider if principal.provider != "unknown" else None
-                    ),
-                    classification_event_id=event_id,
-                )
-            )
-
-        await services.audit.record(
-            tool="note_write",
-            action="create" if created else "update",
-            object_type="note",
-            object_id=note_id,
-            principal=principal,
-            classification_event_id=event_id,
-            provenance="assistant_generated",
-            resulting_version={"version": version, "note_class": destination},
-        )
-
-        return {
-            "note_id": str(note_id),
-            "created": created,
-            "version": version,
-            "note_class": destination,
-            "vault_path": vault_path,
-            "queued_for_vault": queued,
-            "vault_note": (
-                "Queued. The file appears once the local obsidian-sync worker runs."
-                if queued
-                else "Not queued for the vault."
-            ),
-            "classification": classification,
-        }

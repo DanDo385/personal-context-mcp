@@ -18,10 +18,12 @@ from personal_context_mcp.classifier.jev import build_classifier
 from personal_context_mcp.classifier.service import ClassificationService
 from personal_context_mcp.config import Settings
 from personal_context_mcp.db.pool import Database
+from personal_context_mcp.email import EmailService
 from personal_context_mcp.embeddings.service import EmbeddingService, build_embedding_provider
 from personal_context_mcp.lists.service import ListService
 from personal_context_mcp.memory.service import MemoryService
 from personal_context_mcp.notes.service import NoteService
+from personal_context_mcp.notes.write import NoteWriter
 from personal_context_mcp.obsidian.paths import VaultPaths
 from personal_context_mcp.obsidian.queue import SyncQueue
 from personal_context_mcp.projects.service import ProjectService
@@ -52,6 +54,8 @@ class Services:
     sync_queue: SyncQueue
     vault_paths: VaultPaths
     oauth_kv: PostgresKeyValue
+    email: EmailService
+    note_writer: NoteWriter
 
     async def aclose(self) -> None:
         await self.embeddings.aclose()
@@ -114,6 +118,18 @@ async def build_services(settings: Settings, db: Database) -> Services:
         sync_queue=sync_queue,
         vault_paths=vault_paths,
         oauth_kv=PostgresKeyValue(db),
+        email=EmailService(db, settings),
+        note_writer=NoteWriter(
+            db=db,
+            settings=settings,
+            notes=notes,
+            projects=projects,
+            classification=classification,
+            lists=lists,
+            queue=sync_queue,
+            paths=vault_paths,
+            audit=audit,
+        ),
     )
 
 

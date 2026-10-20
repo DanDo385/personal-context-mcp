@@ -83,6 +83,33 @@ systemctl --user enable --now obsidian-sync.timer
 The timer runs the helper every 5 minutes. To stop: `systemctl --user disable --now obsidian-sync.timer`.
 Logs: `journalctl --user -u obsidian-sync -f`.
 
+## Send a note or list from any chat
+
+Say "send this to my vault". The app calls `note_write` and tells you whether
+the note is **queued** or **already written**. Queued means this helper still
+needs to pick it up. Saving to shared memory with "save this" alone can leave
+the vault untouched.
+
+Each new note has one home. Existing numbered folders stay in use:
+
+| Logical home | Default vault folder |
+| --- | --- |
+| `projects/{project}` | `20-Projects/{project}/` |
+| `lesson/{category}` | `30-Research/Lessons/{category}/` |
+| `setup/{tool}` | `60-Resources/Setup/{tool}/` |
+| `other` | `00-Inbox/` |
+
+Concepts are tags such as `concept/lsp`; they do not create extra copies.
+Custom root settings replace the numbered root names in this mapping.
+Existing files are not moved by this update. If a file already has a different
+tracked path, the server refuses a second copy and asks you to relocate it first.
+
+For a list, the app finds your existing list and asks `note_write` for its vault
+view. It appears under `Lists/` inside its home. Tick an item in Obsidian while
+the helper is running: the same item is completed in the database on the next
+poll. Keep the hidden `pc:id` comments intact so items stay linked. Ordinary
+Markdown checkboxes in a prose note do not have this two-way behavior.
+
 (Tip: if `systemctl --user` says "Failed to connect to bus", your Linux setup doesn't have a user
 session manager. Use `systemctl` with `sudo` instead: copy the files to `/etc/systemd/system/` and
 replace `%h` in the service file with your full home directory path.)

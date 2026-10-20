@@ -36,6 +36,7 @@ NOTES_WRITE = "notes:write"
 ARTIFACTS_READ = "artifacts:read"
 ARTIFACTS_WRITE = "artifacts:write"
 REVIEW = "review:write"
+EMAIL_SEND = "email:send"
 
 ALL_SCOPES: tuple[str, ...] = (
     CONTEXT_READ,
@@ -52,6 +53,7 @@ ALL_SCOPES: tuple[str, ...] = (
     ARTIFACTS_READ,
     ARTIFACTS_WRITE,
     REVIEW,
+    EMAIL_SEND,
 )
 
 READ_SCOPES: tuple[str, ...] = tuple(s for s in ALL_SCOPES if s.endswith(":read"))
@@ -120,7 +122,7 @@ def provider_from_client(client_name: str | None, client_id: str | None = None) 
     trail that invents an attribution is worse than one that admits ignorance.
     """
     haystack = " ".join(filter(None, (client_name, client_id))).lower()
-    for provider in ("chatgpt", "claude", "gemini", "grok"):
+    for provider in ("chatgpt", "claude", "gemini", "grok", "codex"):
         if provider in haystack:
             return provider
     if "openai" in haystack:

@@ -146,6 +146,6 @@ to their 1Password Environment (`project-env`).
 
 ### Consumers outside `src/`
 
-- `skills/` — eight portable workflow skills handed to the providers.
+- `skills/` - portable workflow skills, including the named search/save/email/vault actions.
 - `instructions/` — per-provider connector setup plus the shared custom instruction.
 - `scripts/` — thin wrappers over `personal-context-mcp import <provider>` / `reclassify`.

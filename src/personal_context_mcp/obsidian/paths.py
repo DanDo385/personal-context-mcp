@@ -153,6 +153,24 @@ class VaultPaths:
             path = f"{self._root(note_class)}/{filename}"
         return validate_vault_path(path, self._roots)
 
+    def home_note(self, home: str, title: str, *, is_list: bool = False) -> str:
+        """Map logical homes onto the existing configured roots."""
+        from personal_context_mcp.homes import home_metadata
+
+        project = home.removeprefix("projects/") if home.startswith("projects/") else None
+        home_metadata(home, project)
+        kind, _, name = home.partition("/")
+        base = {
+            "projects": f"{self._root('project')}/{name}",
+            "lesson": f"{self._root('research')}/Lessons/{name}",
+            "setup": f"{self._root('resource')}/Setup/{name}",
+            "other": self._root("inbox"),
+        }[kind]
+        middle = "/Lists" if is_list else ""
+        return validate_vault_path(
+            f"{base}{middle}/{safe_filename(slugify(title) or 'note')}.md", self._roots
+        )
+
     def moc(self, title: str) -> str:
         """Maps of Content live together under the atlas root."""
         filename = f"{safe_filename(slugify(title) or 'map')}.md"
