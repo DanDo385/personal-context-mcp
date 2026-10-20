@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -367,8 +367,8 @@ SELECT * FROM (
 
 #: Newer rows in the same project that share several topic words with a
 #: returned decision. Project-name words do not count as shared topic, and
-#: neither do words found in at least 30% of the project's decisions and
-#: sessions (the user's own name, the product's jargon): those say nothing
+#: neither do words found in at least 30% of the decisions and sessions of a
+#: project with 20 or more (the user's own name, the product's jargon): those say nothing
 #: about whether two items are about the same thing.
 _CONFLICT_SQL = """
 WITH x AS (
@@ -386,7 +386,7 @@ WITH x AS (
 ), common AS (
     SELECT docs.project_id, l
     FROM docs JOIN sizes USING (project_id), unnest(tsvector_to_array(docs.search_tsv)) l
-    WHERE sizes.n >= 10
+    WHERE sizes.n >= 20
     GROUP BY docs.project_id, sizes.n, l
     HAVING count(*) >= 0.3 * sizes.n
 ), d AS (
@@ -763,10 +763,21 @@ class RetrievalService:
         handoff_ids = {i.id for h in handoffs for i in h}
 
         # -- 2. relevant candidates --------------------------------------
-        relevant: list[ContextItem] = []
-        if not parsed.is_empty:
-            relevant = await self._search(
+        # Once the project is known, its own name is not a search term: it
+        # matches nearly everything the project holds.
+        if focus is not None:
+            name_words = {w for spelling in focus.spellings() for w in spelling}
+            searched = replace(
                 parsed,
+                terms=tuple(t for t in parsed.terms if t not in name_words),
+                compounds=tuple(c for c in parsed.compounds if not set(c) <= name_words),
+            )
+        else:
+            searched = parsed
+        relevant: list[ContextItem] = []
+        if not searched.is_empty:
+            relevant = await self._search(
+                searched,
                 limit=12,
                 project=focus,
                 include_unscoped=focus is not None,
@@ -777,9 +788,9 @@ class RetrievalService:
 
         # -- 3. raw candidates, only when nothing else matched -----------
         raw: list[ContextItem] = []
-        if not handoff_ids and not relevant and not parsed.is_empty:
+        if not handoff_ids and not relevant and not searched.is_empty:
             found = await self._search(
-                parsed,
+                searched,
                 limit=4,
                 project=focus,
                 include_messages=True,
@@ -900,13 +911,19 @@ class RetrievalService:
                     items=counts["handoff"] or None,
                 )
             )
-        if parsed.is_empty:
-            layers.append(LayerReport(name="relevant", status="skipped", reason="no query terms"))
+        if searched.is_empty:
+            layers.append(
+                LayerReport(
+                    name="relevant",
+                    status="skipped",
+                    reason="no query terms" if parsed.is_empty else "query only names the project",
+                )
+            )
         else:
             layers.append(
                 LayerReport(name="relevant", status="ran", items=counts["relevant"] or None)
             )
-        if raw or (not handoff_ids and not relevant and not parsed.is_empty):
+        if raw or (not handoff_ids and not relevant and not searched.is_empty):
             layers.append(
                 LayerReport(name="raw_messages", status="ran", items=counts["raw"] or None)
             )
