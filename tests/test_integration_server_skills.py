@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -20,9 +21,42 @@ from pydantic import SecretStr
 from conftest import requires_db
 from obsidian_sync.config import WorkerSettings
 from obsidian_sync.worker import ObsidianSyncWorker
+from personal_context_mcp.db.migrate import apply_migrations, load_migrations
 from personal_context_mcp.errors import NotFoundError, ValidationError
 
 pytestmark = requires_db
+
+
+async def test_migration_assigns_homes_without_losing_existing_tags(db, tmp_path):
+    before = tmp_path / "before-server-skills"
+    before.mkdir()
+    for migration in load_migrations():
+        if migration.version < "0008_email_drafts":
+            shutil.copyfile(migration.path, before / migration.path.name)
+    async with db.acquire() as conn:
+        await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+        await apply_migrations(conn, directory=before)
+        project = await conn.fetchval(
+            "INSERT INTO projects (slug, name) VALUES ('memory','Memory') RETURNING id"
+        )
+        conversation = await conn.fetchval(
+            "INSERT INTO conversations (provider, provider_conversation_id, project_id, metadata) VALUES ('claude','existing',$1,$2) RETURNING id",
+            project,
+            {"tags": ["concept/sql"]},
+        )
+        note = await conn.fetchval(
+            "INSERT INTO notes (slug,title,content,content_sha256,metadata) VALUES ('existing','Existing','Body','hash',$1) RETURNING id",
+            {"tags": ["concept/lsp"]},
+        )
+        await apply_migrations(conn)
+        assert await conn.fetchval(
+            "SELECT metadata FROM conversations WHERE id = $1", conversation
+        ) == {"home": "projects/memory", "tags": ["concept/sql", "projects/memory"]}
+        assert await conn.fetchval("SELECT metadata FROM notes WHERE id = $1", note) == {
+            "home": "other",
+            "tags": ["concept/lsp", "other"],
+        }
+        assert await conn.fetchval("SELECT count(*) FROM sync_jobs") == 0
 
 
 @pytest.fixture

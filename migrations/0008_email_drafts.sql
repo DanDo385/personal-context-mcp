@@ -18,7 +18,7 @@ CREATE TABLE email_drafts (
 -- Give existing content one home without moving any files or guessing concepts.
 UPDATE conversations c SET metadata = c.metadata || jsonb_build_object(
     'home', coalesce((SELECT 'projects/' || p.slug FROM projects p WHERE p.id = c.project_id), 'other'),
-    'tags', jsonb_build_array(coalesce((SELECT 'projects/' || p.slug FROM projects p WHERE p.id = c.project_id), 'other'))
+    'tags', coalesce(c.metadata->'tags', '[]'::jsonb) || jsonb_build_array(coalesce((SELECT 'projects/' || p.slug FROM projects p WHERE p.id = c.project_id), 'other'))
 ) WHERE NOT (c.metadata ? 'home');
 
 UPDATE notes n SET metadata = n.metadata || jsonb_build_object(
