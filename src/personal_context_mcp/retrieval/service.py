@@ -375,12 +375,15 @@ WITH x AS (
     SELECT id, project_id, decided_at, search_tsv FROM decisions
     WHERE id = ANY($1::uuid[]) AND status = 'active'
 ), docs AS (
-    SELECT o.project_id, o.search_tsv FROM decisions o
-    WHERE o.status = 'active' AND o.project_id IN (SELECT project_id FROM x)
+    -- A sample is enough to tell which words are everywhere: the newest 150
+    -- decisions and 150 sessions keep this cheap on a large project.
+    (SELECT o.project_id, o.search_tsv FROM decisions o
+     WHERE o.status = 'active' AND o.project_id IN (SELECT project_id FROM x)
+     ORDER BY o.decided_at DESC LIMIT 150)
     UNION ALL
-    SELECT coalesce(s.project_id, c.project_id), s.search_tsv
-    FROM session_summaries s JOIN conversations c ON c.id = s.conversation_id
-    WHERE coalesce(s.project_id, c.project_id) IN (SELECT project_id FROM x)
+    (SELECT s.project_id, s.search_tsv FROM session_summaries s
+     WHERE s.project_id IN (SELECT project_id FROM x)
+     ORDER BY s.updated_at DESC LIMIT 150)
 ), sizes AS (
     SELECT project_id, count(*) AS n FROM docs GROUP BY project_id
 ), common AS (
@@ -454,6 +457,8 @@ class _Conflict:
     newer_kind: str
     newer_provenance: str
     newer_body: str | None
+    #: Topic words the two share; more means more likely the same subject.
+    shared: int = 0
 
 
 @dataclass
@@ -643,6 +648,7 @@ class RetrievalService:
                     newer_kind=row["kind"],
                     newer_provenance=row["provenance"],
                     newer_body=row["body"],
+                    shared=len(shared),
                 )
             )
         return found
@@ -814,7 +820,12 @@ class RetrievalService:
                 item.estimated_tokens = _cost(item)
 
         everything = {i.id: i for h in handoffs for i in h} | {i.id: i for i in relevant + raw}
-        conflicts = await self._find_conflicts(list(everything.values()))
+        # Each checked decision costs a lookup, so check the ones that matter:
+        # those matching the query first, then the handoff's newest.
+        likely = [i for i in relevant if i.type == "decision"][:5]
+        for h in handoffs:
+            likely += [i for i in h if i.type == "decision"][:5]
+        conflicts = await self._find_conflicts(likely)
         partners: dict[UUID, list[UUID]] = {}
         for c in conflicts:
             partners.setdefault(c.older, []).append(c.newer)
@@ -844,29 +855,37 @@ class RetrievalService:
             budget.take(item.estimated_tokens)
             return True
 
+        priority: dict[UUID, int] = {}
         for item in order:
             if not add(item):
                 left_out += 1
                 continue
-            # The newer side of a conflict travels with the decision it may overrule.
+            priority.setdefault(item.id, len(priority))
+            # The other side of a conflict travels with the item that brought it,
+            # at the same priority, so the pair is kept or trimmed together.
             for other in partners.get(item.id, []):
-                if other in everything:
-                    add(everything[other])
+                if other in everything and add(everything[other]):
+                    priority.setdefault(other, priority[item.id])
 
         # -- conflict reports for what was chosen ----------------------------
         reports: list[ConflictReport] = []
+        reported_older: set[UUID] = set()
         for c in sorted(
             conflicts,
             key=lambda c: (
                 c.kind != "superseded",
                 not (c.older in chosen and c.newer in chosen),
                 c.newer_provenance != "user_statement",
+                -c.shared,
             ),
         ):
             if c.older not in chosen and c.newer not in chosen:
                 continue
+            if c.older in reported_older:
+                continue  # one report per decision: its strongest challenger
             if len(reports) == _MAX_CONFLICT_REPORTS:
                 break
+            reported_older.add(c.older)
             older_text = None
             if c.older not in chosen and c.older in everything:
                 older_text = truncate_for_budget(everything[c.older].content, 40)
@@ -965,9 +984,8 @@ class RetrievalService:
         # The budget covers the whole result as sent. If the estimate above was
         # short, drop the lowest-priority items until it fits.
         size = _wire_tokens(package)
-        priority = {i.id: n for n, i in enumerate(order)}
         while size > token_budget and package.items:
-            worst = max(package.items, key=lambda i: priority.get(i.id, len(order)))
+            worst = max(package.items, key=lambda i: (priority.get(i.id, len(order)), i.layer))
             package.items.remove(worst)
             for report in package.conflicts:
                 if report.ids[0] == worst.id and report.older is None:
