@@ -1,13 +1,11 @@
-# Only the package, its lockfile and metadata are needed to serve requests.
+# Runtime code, workflow skills and SQL migrations are needed to serve requests.
 .data/
 .venv/
 .tools/
 exports/
 tests/
 scripts/
-skills/
 instructions/
-migrations/
 deploy/
 docker-compose.yml
 Dockerfile

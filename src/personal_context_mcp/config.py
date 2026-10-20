@@ -188,6 +188,10 @@ class Settings(BaseSettings):
     gemini_digest_doc_id: str = ""
     gemini_digest_days: int = 14
 
+    # ------------------------------------------------------------- AgentMail
+    agentmail_api_key: SecretStr = SecretStr("")
+    agentmail_inbox_id: str = ""
+
     # -------------------------------------------------------------- obsidian
     obsidian_enabled: bool = True
     obsidian_mirror_max_mb: float = 5.0

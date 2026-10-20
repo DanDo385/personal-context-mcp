@@ -27,6 +27,33 @@ def _skills_dir() -> Path | None:
 
 
 def register(mcp: FastMCP) -> None:
+    # The same short workflow is used by app Skills and slash-command clients.
+    def action_guide(name: str) -> str:
+        directory = _skills_dir()
+        if directory is None:
+            raise RuntimeError("Workflow skills are missing from this deployment.")
+        return (directory / name / "SKILL.md").read_text(encoding="utf-8")
+
+    @mcp.prompt(name="search")
+    def search() -> str:
+        """Search shared memory for a topic named by the user."""
+        return action_guide("search")
+
+    @mcp.prompt(name="save")
+    def save() -> str:
+        """Save this session with one home and its concept tags."""
+        return action_guide("save")
+
+    @mcp.prompt(name="email")
+    def email() -> str:
+        """Draft an email, show it, and send only after confirmation."""
+        return action_guide("email")
+
+    @mcp.prompt(name="vault")
+    def vault() -> str:
+        """Queue a note, summary or two-way list for Obsidian."""
+        return action_guide("vault")
+
     @mcp.prompt(name="recall_context")
     def recall_context(topic: str = "") -> str:
         """How to retrieve shared context before answering."""
@@ -67,6 +94,9 @@ def register(mcp: FastMCP) -> None:
             "- project_updates: status or goal changes\n"
             "- open_questions: what is still unresolved\n"
             "- resolved_questions: earlier open questions this conversation answered\n\n"
+            "- home: one of projects/{existing-project-slug}, lesson/{category}, setup/{tool}, other\n"
+            "- concepts: covered concept names, stored as concept/{name} tags\n"
+            "- queue_for_vault=false for shared-memory saving; note_write handles explicit vault requests\n\n"
             "Do not checkpoint small talk, a resolved lookup, or anything you "
             "already checkpointed in this conversation. Repeats are deduplicated, "
             "but the call still costs a round trip."

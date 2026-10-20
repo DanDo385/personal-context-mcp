@@ -16,6 +16,7 @@ import asyncpg
 from personal_context_mcp.db.pool import Database
 from personal_context_mcp.embeddings.service import EmbeddingService
 from personal_context_mcp.errors import NotFoundError
+from personal_context_mcp.homes import home_metadata
 from personal_context_mcp.models import NoteClass, NoteRecord
 from personal_context_mcp.obsidian.render import extract_note_body
 from personal_context_mcp.util import sha256_text, slugify
@@ -36,6 +37,8 @@ def _record(row: asyncpg.Record, *, include_content: bool = False) -> NoteRecord
         version=row["version"],
         updated_at=row["updated_at"],
         content=row["content"] if include_content else None,
+        home=(row.get("metadata") or {}).get("home"),
+        tags=(row.get("metadata") or {}).get("tags", []),
     )
 
 
@@ -78,6 +81,8 @@ class NoteService:
         provenance: str = "assistant_generated",
         author: str | None = None,
         append: bool = False,
+        home: str | None = None,
+        concepts: list[str] | None = None,
         conn: asyncpg.Connection | None = None,
     ) -> tuple[UUID, bool, int]:
         """Create or update a note. Returns (id, created, version).
@@ -100,6 +105,8 @@ class NoteService:
                     provenance=provenance,
                     author=author,
                     append=append,
+                    home=home,
+                    concepts=concepts,
                     conn=tx,
                 )
         executor = conn
@@ -108,11 +115,44 @@ class NoteService:
         # the same title would otherwise both see no row and both insert.
         await executor.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"notes:{slug}")
         existing = await executor.fetchrow(
-            "SELECT id, content, version FROM notes WHERE slug = $1", slug
+            "SELECT id, content, version, metadata, project_id, sensitivity FROM notes WHERE slug = $1",
+            slug,
         )
 
-        if existing and append and existing["content"] not in content:
-            content = f"{existing['content'].rstrip()}\n\n---\n\n{content.strip()}"
+        project_slug = await executor.fetchval(
+            "SELECT slug FROM projects WHERE id = $1",
+            project_id or (existing["project_id"] if existing else None),
+        )
+        previous = (existing["metadata"] or {}) if existing else {}
+        if existing:
+            levels = {"normal": 0, "private": 1, "highly_sensitive": 2}
+            sensitivity = max((sensitivity, existing["sensitivity"]), key=levels.__getitem__)
+        metadata = home_metadata(
+            home or previous.get("home"),
+            project_slug,
+            concepts
+            if concepts is not None
+            else [
+                t.removeprefix("concept/")
+                for t in previous.get("tags", [])
+                if t.startswith("concept/")
+            ],
+        )
+
+        metadata["tags"] = [
+            t
+            for t in previous.get("tags", [])
+            if t != previous.get("home") and not t.startswith("concept/")
+        ] + metadata["tags"]
+
+        if append:
+            incoming_hash = sha256_text(content.strip())
+            appended = previous.get("append_hashes", [])
+            if existing and incoming_hash in appended:
+                content = existing["content"]
+            elif existing and existing["content"] not in content:
+                content = f"{existing['content'].rstrip()}\n\n---\n\n{content.strip()}"
+            metadata["append_hashes"] = sorted({*appended, incoming_hash})
 
         content = content.strip()
         content_hash = sha256_text(content)
@@ -126,9 +166,9 @@ class NoteService:
                 INSERT INTO notes (
                     slug, title, content, content_sha256, note_class, project_id,
                     vault_path, sensitivity, citations, source_provider,
-                    source_conversation_id, provenance, embedding
+                    source_conversation_id, provenance, embedding, metadata
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::pc_sensitivity,$9,$10,$11,
-                          $12::pc_provenance,$13)
+                          $12::pc_provenance,$13,$14)
                 RETURNING id
                 """,
                 slug,
@@ -144,6 +184,7 @@ class NoteService:
                 source_conversation_id,
                 provenance,
                 embedding,
+                metadata,
             )
             await self._add_version(
                 executor,
@@ -156,6 +197,12 @@ class NoteService:
             )
             return note_id, True, 1
 
+        await executor.execute(
+            "UPDATE notes SET metadata = metadata || $2::jsonb, sensitivity = $3::pc_sensitivity WHERE id = $1",
+            existing["id"],
+            metadata,
+            sensitivity,
+        )
         if existing["content"] == content:
             return existing["id"], False, existing["version"]
 

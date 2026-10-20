@@ -69,6 +69,11 @@ real names before referring to them)
    - `resolved_questions` - open questions from earlier sessions (shown in the
      bootstrap handoff) that this conversation answered, copied as shown
    - `artifacts` - ids of artifacts already captured this session
+   - `home` - exactly one of `projects/{existing-project-slug}`,
+     `lesson/{category}`, `setup/{tool}` or `other`
+   - `concepts` - concept names covered; these become `concept/{name}` tags
+   - `queue_for_vault=false` - save shared memory only; an explicit vault
+     request uses `note_write`
 
 3. **Read the result.** It reports exactly what was created, updated and
    skipped, plus how the content was classified. If `notes` is non-empty, it is

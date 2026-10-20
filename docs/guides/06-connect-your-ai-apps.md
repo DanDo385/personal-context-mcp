@@ -124,6 +124,14 @@ learned it, another one knew it.
   instructions. Upload each folder under [skills/](../../skills/) in the app's skills settings. The
   apps work without them.
 
+For the four named actions, upload the `search`, `save`, `email` and `vault` skill
+folders. The same names appear in the server's MCP prompt list; clients that show
+prompts as slash commands can invoke `/search`, `/save`, `/email` and `/vault`.
+You can always use the ordinary phrases in [daily use](12-daily-use.md).
+Real email needs the optional AgentMail setup in that guide and the `email:send`
+client scope. Enabling other saving tools does not grant that scope automatically,
+unless your policy already grants `*` (all scopes).
+
 ## Common problems
 
 | You see | Fix |

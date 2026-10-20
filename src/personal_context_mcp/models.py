@@ -256,6 +256,8 @@ class NoteRecord(Base):
     version: int
     updated_at: datetime
     content: str | None = None
+    home: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class ArtifactFileRecord(Base):

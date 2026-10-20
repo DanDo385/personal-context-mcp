@@ -46,7 +46,8 @@ tools, how to resolve a list name — belong where they are loaded on demand:
 - **Skills** (Claude, and ChatGPT where account-level skills are available)
 - **MCP tool descriptions**, which the model reads when it considers a tool
 - **MCP prompts**, exposed by this server as `recall_context`,
-  `checkpoint_session`, `capture_artifacts` and `manage_lists`
+  `checkpoint_session`, `capture_artifacts`, `manage_lists`, and the named
+  actions `search`, `save`, `email` and `vault`
 - **MCP resources**, at `personal-context-mcp://guide/<skill-name>`, which serve
   the full text of each skill to clients that have no skills mechanism
 

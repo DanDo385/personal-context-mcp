@@ -8,6 +8,7 @@ from personal_context_mcp.mcp import (
     prompts,
     tools_artifacts,
     tools_context,
+    tools_email,
     tools_lists,
     tools_memory,
     tools_projects,
@@ -17,6 +18,7 @@ from personal_context_mcp.mcp import (
 
 def register_all(mcp: FastMCP) -> None:
     tools_context.register(mcp)
+    tools_email.register(mcp)
     tools_memory.register(mcp)
     tools_projects.register(mcp)
     tools_lists.register(mcp)
