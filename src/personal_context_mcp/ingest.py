@@ -20,8 +20,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from personal_context_mcp.config import Settings
-from personal_context_mcp.db.pool import Database
 from personal_context_mcp.logging_setup import get_logger
+from personal_context_mcp.services import get_services
 from personal_context_mcp.util import sha256_text, utcnow
 
 logger = get_logger(__name__)
@@ -36,7 +36,7 @@ def _bearer_token(request: Request) -> str | None:
 
 
 async def _validate_device_token(
-    db: Database, token: str
+    db, token: str
 ) -> dict[str, Any] | None:
     """Validate a device token. Returns device record or None."""
     row = await db.fetchrow(
@@ -79,7 +79,7 @@ def build_ingest_routes(settings: Settings) -> list:
         token = _make_token()
 
         try:
-            db = Database(settings.database_url)
+            db = get_services().db
             await db.execute(
                 """
                 INSERT INTO device_tokens (device_id, token, device_name)
@@ -118,7 +118,7 @@ def build_ingest_routes(settings: Settings) -> list:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
         device = await _validate_device_token(
-            Database(settings.database_url), token
+            get_services().db, token
         )
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -129,7 +129,7 @@ def build_ingest_routes(settings: Settings) -> list:
                 {"error": "can only revoke own device"}, status_code=403
             )
 
-        await Database(settings.database_url).execute(
+        await get_services().db.execute(
             "UPDATE device_tokens SET revoked_at = now() WHERE device_id = $1",
             device_id,
         )
@@ -145,7 +145,7 @@ def build_ingest_routes(settings: Settings) -> list:
         if not token:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        db = Database(settings.database_url)
+        db = get_services().db
         device = await _validate_device_token(db, token)
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -295,7 +295,7 @@ def build_ingest_routes(settings: Settings) -> list:
         if not token:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        db = Database(settings.database_url)
+        db = get_services().db
         device = await _validate_device_token(db, token)
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)

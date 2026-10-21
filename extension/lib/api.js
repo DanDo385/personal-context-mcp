@@ -1,8 +1,8 @@
 // Personal Context — HTTPS ingest client.
 // Sends conversations to the server with chunked, gzip, resumable uploads.
 
-const DEFAULT_SERVER_URL = 'https://mbp.tailfbd394.ts.net';
-const FALLBACK_SERVER_URL = '';
+const DEFAULT_SERVER_URL = 'https://personal-context-mcp-seven.vercel.app';
+const FALLBACK_SERVER_URL = 'https://mbp.tailfbd394.ts.net';
 
 /**
  * Get the configured server URL, with fallback.
