@@ -13,7 +13,9 @@ DELETE /api/v1/auth/devices/{device_id}
 
 from __future__ import annotations
 
+import contextlib
 import secrets
+from datetime import datetime
 from typing import Any
 
 from starlette.requests import Request
@@ -215,6 +217,14 @@ def build_ingest_routes(settings: Settings) -> list:
             msg_created_at = msg.get("created_at")
             content_hash = sha256_text(content)
 
+            # Convert ISO string to datetime for asyncpg.
+            msg_dt = None
+            if msg_created_at:
+                with contextlib.suppress(ValueError, TypeError):
+                    msg_dt = datetime.fromisoformat(
+                        msg_created_at.replace("Z", "+00:00")
+                    )
+
             result = await db.fetchval(
                 """
                 INSERT INTO messages (
@@ -241,7 +251,7 @@ def build_ingest_routes(settings: Settings) -> list:
                 role,
                 content,
                 content_hash,
-                msg_created_at,
+                msg_dt,
             )
             if result:
                 inserted += 1
