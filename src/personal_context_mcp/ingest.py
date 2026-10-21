@@ -221,9 +221,7 @@ def build_ingest_routes(settings: Settings) -> list:
             msg_dt = None
             if msg_created_at:
                 with contextlib.suppress(ValueError, TypeError):
-                    msg_dt = datetime.fromisoformat(
-                        msg_created_at.replace("Z", "+00:00")
-                    )
+                    msg_dt = datetime.fromisoformat(msg_created_at.replace("Z", "+00:00"))
 
             result = await db.fetchval(
                 """
