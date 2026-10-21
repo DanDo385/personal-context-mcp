@@ -31,7 +31,7 @@ async def test_migration_assigns_homes_without_losing_existing_tags(db, tmp_path
     before = tmp_path / "before-server-skills"
     before.mkdir()
     for migration in load_migrations():
-        if migration.version < "0008_email_drafts":
+        if migration.version < "0009_email_drafts":
             shutil.copyfile(migration.path, before / migration.path.name)
     async with db.acquire() as conn:
         await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
