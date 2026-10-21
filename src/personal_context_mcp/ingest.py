@@ -176,90 +176,89 @@ def build_ingest_routes(settings: Settings) -> list:
         key_seed = f"{provider}:{title or ''}:{utcnow():%Y-%m-%d}"
         external_id = provider_conversation_id or (f"synthetic:{sha256_text(key_seed)[:32]}")
 
-        async with db.transaction() as conn:
-            # Upsert conversation — mirrors sessions/service.py ensure_conversation.
-            row = await conn.fetchrow(
+        # Upsert conversation — mirrors sessions/service.py ensure_conversation.
+        row = await db.fetchrow(
+            """
+            INSERT INTO conversations (
+                provider, provider_conversation_id, title, model,
+                imported, import_key
+            ) VALUES ($1,$2,$3,$4,true,$5)
+            ON CONFLICT (provider, provider_conversation_id)
+                WHERE provider_conversation_id IS NOT NULL
+            DO UPDATE SET
+                title = coalesce(EXCLUDED.title, conversations.title),
+                model = coalesce(EXCLUDED.model, conversations.model),
+                updated_at = now()
+            RETURNING id, (xmax = 0) AS created
+            """,
+            provider,
+            external_id,
+            title,
+            model,
+            f"{provider}:{external_id}",
+        )
+        if row is None:
+            return JSONResponse({"error": "upsert failed"}, status_code=500)
+        conv_id = row["id"]
+        created = bool(row["created"])
+
+        # Upsert messages with the provided IDs.
+        inserted = 0
+        skipped = 0
+        for msg in messages:
+            if not msg.get("content"):
+                continue
+            provider_msg_id = msg.get("provider_message_id")
+            role = msg.get("role", "user")
+            content = msg["content"]
+            msg_model = msg.get("model")
+            msg_created_at = msg.get("created_at")
+
+            result = await db.fetchval(
                 """
-                INSERT INTO conversations (
-                    provider, provider_conversation_id, title, model,
-                    imported, import_key
-                ) VALUES ($1,$2,$3,$4,true,$5)
-                ON CONFLICT (provider, provider_conversation_id)
-                    WHERE provider_conversation_id IS NOT NULL
-                DO UPDATE SET
-                    title = coalesce(EXCLUDED.title, conversations.title),
-                    model = coalesce(EXCLUDED.model, conversations.model),
-                    updated_at = now()
-                RETURNING id, (xmax = 0) AS created
-                """,
-                provider,
-                external_id,
-                title,
-                model,
-                f"{provider}:{external_id}",
-            )
-            if row is None:
-                return JSONResponse({"error": "upsert failed"}, status_code=500)
-            conv_id = row["id"]
-            created = bool(row["created"])
-
-            # Upsert messages with the provided IDs.
-            inserted = 0
-            skipped = 0
-            for msg in messages:
-                if not msg.get("content"):
-                    continue
-                provider_msg_id = msg.get("provider_message_id")
-                role = msg.get("role", "user")
-                content = msg["content"]
-                msg_model = msg.get("model")
-                msg_created_at = msg.get("created_at")
-
-                result = await conn.fetchval(
-                    """
-                    INSERT INTO messages (
-                        conversation_id, provider, provider_message_id,
-                        model, role, content, content_sha256,
-                        provenance, sequence, created_at, metadata
-                    ) VALUES (
-                        $1, $2, $3, $4, $5, $6,
-                        encode(sha256($6::bytea), 'hex'),
-                        'imported_metadata'::pc_provenance,
-                        (SELECT coalesce(max(sequence), -1) + 1
-                         FROM messages WHERE conversation_id = $1),
-                        coalesce($7::timestamptz, now()),
-                        '{}'::jsonb
-                    )
-                    ON CONFLICT (conversation_id, provider_message_id)
-                        WHERE provider_message_id IS NOT NULL
-                    DO NOTHING
-                    RETURNING id
-                    """,
-                    conv_id,
-                    provider,
-                    provider_msg_id,
-                    msg_model,
-                    role,
-                    content,
-                    msg_created_at,
+                INSERT INTO messages (
+                    conversation_id, provider, provider_message_id,
+                    model, role, content, content_sha256,
+                    provenance, sequence, created_at, metadata
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6,
+                    encode(sha256($6::bytea), 'hex'),
+                    'imported_metadata'::pc_provenance,
+                    (SELECT coalesce(max(sequence), -1) + 1
+                     FROM messages WHERE conversation_id = $1),
+                    coalesce($7::timestamptz, now()),
+                    '{}'::jsonb
                 )
-                if result:
-                    inserted += 1
-                else:
-                    skipped += 1
-
-            # Update conversation timestamps.
-            await conn.execute(
-                """
-                UPDATE conversations
-                SET updated_at = coalesce($2::timestamptz, updated_at),
-                    metadata = metadata || $3::jsonb
-                WHERE id = $1
+                ON CONFLICT (conversation_id, provider_message_id)
+                    WHERE provider_message_id IS NOT NULL
+                DO NOTHING
+                RETURNING id
                 """,
                 conv_id,
-                updated_at,
-                {"_attachments": attachments} if attachments else "{}",
+                provider,
+                provider_msg_id,
+                msg_model,
+                role,
+                content,
+                msg_created_at,
             )
+            if result:
+                inserted += 1
+            else:
+                skipped += 1
+
+        # Update conversation timestamps.
+        await db.execute(
+            """
+            UPDATE conversations
+            SET updated_at = coalesce($2::timestamptz, updated_at),
+                metadata = metadata || $3::jsonb
+            WHERE id = $1
+            """,
+            conv_id,
+            updated_at,
+            {"_attachments": attachments} if attachments else "{}",
+        )
 
         status = "created" if created else "updated"
         if created:
