@@ -176,7 +176,7 @@ def build_ingest_routes(settings: Settings) -> list:
         key_seed = f"{provider}:{title or ''}:{utcnow():%Y-%m-%d}"
         external_id = provider_conversation_id or (f"synthetic:{sha256_text(key_seed)[:32]}")
 
-        async with db.pool.acquire() as conn, conn.transaction():
+        async with db.transaction() as conn:
             # Upsert conversation — mirrors sessions/service.py ensure_conversation.
             row = await conn.fetchrow(
                 """
