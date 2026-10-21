@@ -307,8 +307,7 @@ def build_ingest_routes(settings: Settings) -> list:
                    c.provider, c.updated_at
             FROM session_summaries ss
             JOIN conversations c ON c.id = ss.conversation_id
-            WHERE ss.classification_status = 'complete'
-               OR ss.classification_status = 'approved'
+            WHERE ss.classification_status = 'classified'
             ORDER BY c.updated_at DESC
             LIMIT 3
             """

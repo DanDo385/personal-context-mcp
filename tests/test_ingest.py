@@ -66,7 +66,7 @@ def device_token(client):
     return data["device_token"]
 
 
-FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "extension", "tests", "fixtures")
+FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "..", "extension", "tests", "fixtures")
 
 
 def _load_fixture(provider: str) -> dict:
@@ -89,9 +89,9 @@ def test_register_device(client, test_provider):
 
 
 def test_register_device_no_body(client):
-    """Registration with no body still works (defaults device name)."""
+    """Registration with no body returns 400 (requires JSON)."""
     resp = client.post("/api/v1/auth/register-device")
-    assert resp.status_code == 200
+    assert resp.status_code == 400
 
 
 def test_unauthorized_ingest(client):
