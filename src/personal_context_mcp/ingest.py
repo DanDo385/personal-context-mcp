@@ -20,9 +20,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from personal_context_mcp.config import Settings
+from personal_context_mcp.importers.base import parse_timestamp
 from personal_context_mcp.logging_setup import get_logger
 from personal_context_mcp.services import get_services
-from personal_context_mcp.util import sha256_text, utcnow
 
 logger = get_logger(__name__)
 
@@ -141,7 +141,8 @@ def build_ingest_routes(settings: Settings) -> list:
         if not token:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        db = get_services().db
+        services = get_services()
+        db = services.db
         device = await _validate_device_token(db, token)
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -164,101 +165,57 @@ def build_ingest_routes(settings: Settings) -> list:
 
         title = body.get("title")
         model = body.get("model")
-        updated_at = body.get("updated_at")
+        updated_at = parse_timestamp(body.get("updated_at"))
         messages = body.get("messages", [])
-        # Attachments stored as metadata for now (v1 references only).
         attachments = body.get("attachments", [])
-
-        if not isinstance(messages, list):
-            return JSONResponse({"error": "messages must be a list"}, status_code=400)
-
-        # Use the same synthetic ID logic as ensure_conversation if needed.
-        key_seed = f"{provider}:{title or ''}:{utcnow():%Y-%m-%d}"
-        external_id = provider_conversation_id or (f"synthetic:{sha256_text(key_seed)[:32]}")
-
-        # Upsert conversation — mirrors sessions/service.py ensure_conversation.
-        row = await db.fetchrow(
-            """
-            INSERT INTO conversations (
-                provider, provider_conversation_id, title, model,
-                imported, import_key
-            ) VALUES ($1,$2,$3,$4,true,$5)
-            ON CONFLICT (provider, provider_conversation_id)
-                WHERE provider_conversation_id IS NOT NULL
-            DO UPDATE SET
-                title = coalesce(EXCLUDED.title, conversations.title),
-                model = coalesce(EXCLUDED.model, conversations.model),
-                updated_at = now()
-            RETURNING id, (xmax = 0) AS created
-            """,
-            provider,
-            external_id,
-            title,
-            model,
-            f"{provider}:{external_id}",
-        )
-        if row is None:
-            return JSONResponse({"error": "upsert failed"}, status_code=500)
-        conv_id = row["id"]
-        created = bool(row["created"])
-
-        # Upsert messages with the provided IDs.
-        inserted = 0
-        skipped = 0
-        for msg in messages:
-            if not msg.get("content"):
-                continue
-            provider_msg_id = msg.get("provider_message_id")
-            role = msg.get("role", "user")
-            content = msg["content"]
-            msg_model = msg.get("model")
-            msg_created_at = msg.get("created_at")
-
-            result = await db.fetchval(
-                """
-                INSERT INTO messages (
-                    conversation_id, provider, provider_message_id,
-                    model, role, content, content_sha256,
-                    provenance, sequence, created_at, metadata
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6,
-                    encode(sha256($6::bytea), 'hex'),
-                    'imported_metadata'::pc_provenance,
-                    (SELECT coalesce(max(sequence), -1) + 1
-                     FROM messages WHERE conversation_id = $1),
-                    coalesce($7::timestamptz, now()),
-                    '{}'::jsonb
-                )
-                ON CONFLICT (conversation_id, provider_message_id)
-                    WHERE provider_message_id IS NOT NULL
-                DO NOTHING
-                RETURNING id
-                """,
-                conv_id,
-                provider,
-                provider_msg_id,
-                msg_model,
-                role,
-                content,
-                msg_created_at,
+        if not isinstance(messages, list) or not isinstance(attachments, list):
+            return JSONResponse(
+                {"error": "messages and attachments must be lists"}, status_code=400
             )
-            if result:
-                inserted += 1
-            else:
-                skipped += 1
+        if not isinstance(provider, str) or not isinstance(provider_conversation_id, str):
+            return JSONResponse(
+                {"error": "provider and provider_conversation_id must be strings"}, status_code=400
+            )
+        if not await db.fetchval("SELECT EXISTS(SELECT 1 FROM providers WHERE id = $1)", provider):
+            return JSONResponse({"error": "unknown provider"}, status_code=400)
+        normalized = []
+        for message in messages:
+            if not isinstance(message, dict) or not isinstance(message.get("content", ""), str):
+                return JSONResponse(
+                    {"error": "each message must contain text content"}, status_code=400
+                )
+            if not message.get("content", "").strip():
+                continue
+            normalized.append(
+                {
+                    **message,
+                    "content": message["content"].replace("\x00", ""),
+                    "created_at": parse_timestamp(message.get("created_at")),
+                    "provenance": "imported_metadata",
+                }
+            )
 
-        # Update conversation timestamps.
-        await db.execute(
-            """
-            UPDATE conversations
-            SET updated_at = coalesce($2::timestamptz, updated_at),
-                metadata = metadata || $3::jsonb
-            WHERE id = $1
-            """,
-            conv_id,
-            updated_at,
-            {"_attachments": attachments} if attachments else "{}",
-        )
+        # Use the canonical conversation/message writers and their dedup keys.
+        async with db.transaction() as conn:
+            conv_id, created = await services.sessions.ensure_conversation(
+                provider=provider,
+                provider_conversation_id=provider_conversation_id,
+                title=title,
+                model=model,
+                imported=True,
+                started_at=parse_timestamp(body.get("created_at")),
+                conn=conn,
+            )
+            inserted = await services.sessions.add_messages(
+                conv_id, normalized, provider=provider, conn=conn
+            )
+            skipped = len(normalized) - inserted
+            await conn.execute(
+                "UPDATE conversations SET updated_at = coalesce($2::timestamptz, updated_at), metadata = metadata || $3::jsonb WHERE id = $1",
+                conv_id,
+                updated_at,
+                {"_attachments": attachments} if attachments else {},
+            )
 
         status = "created" if created else "updated"
         if created:
@@ -294,7 +251,8 @@ def build_ingest_routes(settings: Settings) -> list:
         if not token:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        db = get_services().db
+        services = get_services()
+        db = services.db
         device = await _validate_device_token(db, token)
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -307,8 +265,7 @@ def build_ingest_routes(settings: Settings) -> list:
                    c.provider, c.updated_at
             FROM session_summaries ss
             JOIN conversations c ON c.id = ss.conversation_id
-            WHERE ss.classification_status = 'complete'
-               OR ss.classification_status = 'approved'
+            WHERE ss.classification_status IN ('classified','needs_review')
             ORDER BY c.updated_at DESC
             LIMIT 3
             """

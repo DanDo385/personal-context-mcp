@@ -7,63 +7,44 @@ They verify idempotent upsert, message dedup, and device token auth.
 from __future__ import annotations
 
 import json
-import os
+from pathlib import Path
 
+import httpx
 import pytest
-from starlette.testclient import TestClient
 
 from conftest import requires_db
-from personal_context_mcp.config import Settings
-from personal_context_mcp.logging_setup import configure_logging
-from personal_context_mcp.server import create_app
+from personal_context_mcp.auth.principal import Principal
 
-pytestmark = [pytest.mark.anyio, requires_db]
+pytestmark = requires_db
 
 
-@pytest.fixture(scope="module")
-def client():
-    """Create a test client with a fresh app instance."""
-    dsn = os.environ["PC_TEST_DATABASE_URL"]
-    settings = Settings(
-        environment="dev",
-        database_url=dsn,
-        auth_mode="none",
-        classifier="rules",
-        embedding_provider="none",
-        storage_backend="local",
-        local_storage_root="/tmp/pc-test-storage",
+@pytest.fixture
+async def client(services, live_server):
+    """Use the disposable migrated database and real app lifespan."""
+    async with httpx.AsyncClient(base_url=str(live_server.base_url)) as client:
+        yield client
+
+
+@pytest.fixture
+async def device_token(client):
+    response = await client.post(
+        "/api/v1/auth/register-device", json={"device_name": "test-browser"}
     )
-    configure_logging("INFO")
-    app = create_app(settings)
-    return TestClient(app)
+    assert response.status_code == 200
+    return response.json()["device_token"]
 
 
-@pytest.fixture(scope="module")
-def device_token(client):
-    """Register a device and return its token."""
-    resp = client.post(
-        "/api/v1/auth/register-device",
-        json={"device_name": "test-browser"},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "device_token" in data
-    return data["device_token"]
-
-
-FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "extension", "tests", "fixtures")
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "extension" / "tests" / "fixtures"
 
 
 def _load_fixture(provider: str) -> dict:
-    path = os.path.join(FIXTURE_DIR, f"{provider}-conversation.json")
-    with open(path) as f:
-        return json.load(f)
+    return json.loads((FIXTURE_DIR / f"{provider}-conversation.json").read_text())
 
 
 @pytest.mark.parametrize("test_provider", ["claude", "chatgpt", "gemini", "grok"])
-def test_register_device(client, test_provider):
+async def test_register_device(client, test_provider):
     """Can register a device and receive a token."""
-    resp = client.post(
+    resp = await client.post(
         "/api/v1/auth/register-device",
         json={"device_name": f"test-{test_provider}"},
     )
@@ -73,30 +54,30 @@ def test_register_device(client, test_provider):
     assert data["device_id"].startswith("dev_")
 
 
-def test_register_device_no_body(client):
-    """Registration with no body still works (defaults device name)."""
-    resp = client.post("/api/v1/auth/register-device")
-    assert resp.status_code == 200
+async def test_register_device_no_body(client):
+    """Missing JSON is rejected without issuing a device token."""
+    resp = await client.post("/api/v1/auth/register-device")
+    assert resp.status_code == 400
 
 
-def test_unauthorized_ingest(client):
+async def test_unauthorized_ingest(client):
     """Ingest without a token returns 401."""
-    resp = client.post(
+    resp = await client.post(
         "/api/v1/ingest/conversation",
         json={"provider": "claude", "provider_conversation_id": "x"},
     )
     assert resp.status_code == 401
 
 
-def test_unauthorized_handoff(client):
+async def test_unauthorized_handoff(client):
     """Handoff without a token returns 401."""
-    resp = client.get("/api/v1/handoff")
+    resp = await client.get("/api/v1/handoff")
     assert resp.status_code == 401
 
 
-def test_ingest_missing_fields(client, device_token):
+async def test_ingest_missing_fields(client, device_token):
     """Ingest without required fields returns 400."""
-    resp = client.post(
+    resp = await client.post(
         "/api/v1/ingest/conversation",
         json={"messages": []},
         headers={"Authorization": f"Bearer {device_token}"},
@@ -105,10 +86,10 @@ def test_ingest_missing_fields(client, device_token):
 
 
 @pytest.mark.parametrize("provider", ["claude", "chatgpt", "gemini", "grok"])
-def test_ingest_new_conversation(client, device_token, provider):
+async def test_ingest_new_conversation(client, device_token, provider):
     """Ingest a new conversation creates it."""
     payload = _load_fixture(provider)
-    resp = client.post(
+    resp = await client.post(
         "/api/v1/ingest/conversation",
         json=payload,
         headers={"Authorization": f"Bearer {device_token}"},
@@ -121,11 +102,11 @@ def test_ingest_new_conversation(client, device_token, provider):
 
 
 @pytest.mark.parametrize("provider", ["claude", "chatgpt", "gemini", "grok"])
-def test_ingest_idempotent(client, device_token, provider):
+async def test_ingest_idempotent(client, device_token, provider):
     """Re-sending the same conversation is idempotent."""
     payload = _load_fixture(provider)
     # First send.
-    resp1 = client.post(
+    resp1 = await client.post(
         "/api/v1/ingest/conversation",
         json=payload,
         headers={"Authorization": f"Bearer {device_token}"},
@@ -134,7 +115,7 @@ def test_ingest_idempotent(client, device_token, provider):
     data1 = resp1.json()
 
     # Second send — same payload.
-    resp2 = client.post(
+    resp2 = await client.post(
         "/api/v1/ingest/conversation",
         json=payload,
         headers={"Authorization": f"Bearer {device_token}"},
@@ -152,11 +133,11 @@ def test_ingest_idempotent(client, device_token, provider):
 
 
 @pytest.mark.parametrize("provider", ["claude", "chatgpt"])
-def test_ingest_append_messages(client, device_token, provider):
+async def test_ingest_append_messages(client, device_token, provider):
     """Sending a conversation with additional messages appends only the new ones."""
     payload = _load_fixture(provider)
     # First send with original messages.
-    resp1 = client.post(
+    resp1 = await client.post(
         "/api/v1/ingest/conversation",
         json=payload,
         headers={"Authorization": f"Bearer {device_token}"},
@@ -174,7 +155,7 @@ def test_ingest_append_messages(client, device_token, provider):
         }
     )
 
-    resp2 = client.post(
+    resp2 = await client.post(
         "/api/v1/ingest/conversation",
         json=payload,
         headers={"Authorization": f"Bearer {device_token}"},
@@ -186,10 +167,10 @@ def test_ingest_append_messages(client, device_token, provider):
     assert data["messages_skipped"] == len(payload["messages"]) - 1
 
 
-def test_revoke_device(client, device_token):
+async def test_revoke_device(client, device_token):
     """Revoking a device token invalidates it."""
     # First, register to get the device_id.
-    resp = client.post(
+    resp = await client.post(
         "/api/v1/auth/register-device",
         json={"device_name": "revoke-test"},
     )
@@ -198,26 +179,42 @@ def test_revoke_device(client, device_token):
     device_id = data["device_id"]
 
     # Revoke it.
-    resp = client.delete(
+    resp = await client.delete(
         f"/api/v1/auth/devices/{device_id}",
         headers={"Authorization": f"Bearer {device_token_new}"},
     )
     assert resp.status_code == 200
 
     # Token should now be invalid.
-    resp = client.get(
+    resp = await client.get(
         "/api/v1/handoff",
         headers={"Authorization": f"Bearer {device_token_new}"},
     )
     assert resp.status_code == 401
 
 
-def test_handoff_returns_data(client, device_token):
+async def test_handoff_returns_data(client, device_token):
     """Handoff endpoint returns JSON even when empty."""
-    resp = client.get(
+    resp = await client.get(
         "/api/v1/handoff",
         headers={"Authorization": f"Bearer {device_token}"},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert "handoff" in data
+
+
+async def test_handoff_contains_a_saved_checkpoint(client, device_token, services):
+    await services.sessions.checkpoint(
+        provider="claude",
+        provider_conversation_id="handoff-test",
+        principal=Principal(subject="tester@example.com", provider="claude"),
+        title="Editor project handoff",
+        summary="Next step: configure the editor language server.",
+        queue_for_vault=False,
+    )
+    response = await client.get(
+        "/api/v1/handoff", headers={"Authorization": f"Bearer {device_token}"}
+    )
+    assert response.status_code == 200
+    assert "configure the editor language server" in response.json()["handoff"]

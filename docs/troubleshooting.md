@@ -8,6 +8,11 @@ Find what you're seeing below. Each guide also ends with a table for its own ste
 
 ## Named actions: email and vault
 
+Browser capture returning HTTP 400 means its payload was rejected. An unknown
+provider, non-text message content, or non-list `messages`/`attachments` must be
+corrected by updating the extension. Captures and their original message times
+are stored through the same canonical writers as imported conversations.
+
 | You see | What to do |
 | --- | --- |
 | `AgentMail is not configured` | Leave email in `dry_run=true`, or configure the two `PC_AGENTMAIL_*` settings using [daily use](guides/12-daily-use.md#optional-email-setup). Restart the server. |
