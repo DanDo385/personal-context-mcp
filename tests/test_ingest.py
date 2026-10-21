@@ -46,9 +46,7 @@ def device_token(client):
     return data["device_token"]
 
 
-FIXTURE_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "extension", "tests", "fixtures"
-)
+FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "extension", "tests", "fixtures")
 
 
 def _load_fixture(provider: str) -> dict:
@@ -161,13 +159,15 @@ def test_ingest_append_messages(client, device_token, provider):
     assert resp1.status_code == 200
 
     # Add a new message.
-    payload["messages"].append({
-        "provider_message_id": f"{provider}-new-msg-001",
-        "role": "assistant",
-        "content": "This is a follow-up response that was added later.",
-        "created_at": "2026-10-15T12:00:00Z",
-        "model": payload.get("model"),
-    })
+    payload["messages"].append(
+        {
+            "provider_message_id": f"{provider}-new-msg-001",
+            "role": "assistant",
+            "content": "This is a follow-up response that was added later.",
+            "created_at": "2026-10-15T12:00:00Z",
+            "model": payload.get("model"),
+        }
+    )
 
     resp2 = client.post(
         "/api/v1/ingest/conversation",

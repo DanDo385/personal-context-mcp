@@ -35,9 +35,7 @@ def _bearer_token(request: Request) -> str | None:
     return None
 
 
-async def _validate_device_token(
-    db, token: str
-) -> dict[str, Any] | None:
+async def _validate_device_token(db, token: str) -> dict[str, Any] | None:
     """Validate a device token. Returns device record or None."""
     row = await db.fetchrow(
         """
@@ -101,11 +99,13 @@ def build_ingest_routes(settings: Settings) -> list:
             extra={"device_id": device_id, "device_name": device_name},
         )
 
-        return JSONResponse({
-            "device_id": device_id,
-            "device_token": token,
-            "device_name": device_name,
-        })
+        return JSONResponse(
+            {
+                "device_id": device_id,
+                "device_token": token,
+                "device_name": device_name,
+            }
+        )
 
     async def revoke_device(request: Request) -> JSONResponse:
         """Revoke a device token by device_id."""
@@ -117,17 +117,13 @@ def build_ingest_routes(settings: Settings) -> list:
         if not token:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        device = await _validate_device_token(
-            get_services().db, token
-        )
+        device = await _validate_device_token(get_services().db, token)
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
         # Only allow self-revocation or admin (future).
         if device["device_id"] != device_id:
-            return JSONResponse(
-                {"error": "can only revoke own device"}, status_code=403
-            )
+            return JSONResponse({"error": "can only revoke own device"}, status_code=403)
 
         await get_services().db.execute(
             "UPDATE device_tokens SET revoked_at = now() WHERE device_id = $1",
@@ -178,9 +174,7 @@ def build_ingest_routes(settings: Settings) -> list:
 
         # Use the same synthetic ID logic as ensure_conversation if needed.
         key_seed = f"{provider}:{title or ''}:{utcnow():%Y-%m-%d}"
-        external_id = provider_conversation_id or (
-            f"synthetic:{sha256_text(key_seed)[:32]}"
-        )
+        external_id = provider_conversation_id or (f"synthetic:{sha256_text(key_seed)[:32]}")
 
         async with db.pool.acquire() as conn, conn.transaction():
             # Upsert conversation — mirrors sessions/service.py ensure_conversation.
@@ -276,16 +270,22 @@ def build_ingest_routes(settings: Settings) -> list:
         else:
             logger.info(
                 "ingest: conversation updated",
-                extra={"provider": provider, "id": str(conv_id),
-                       "messages_inserted": inserted, "messages_skipped": skipped},
+                extra={
+                    "provider": provider,
+                    "id": str(conv_id),
+                    "messages_inserted": inserted,
+                    "messages_skipped": skipped,
+                },
             )
 
-        return JSONResponse({
-            "conversation_id": str(conv_id),
-            "status": status,
-            "messages_inserted": inserted,
-            "messages_skipped": skipped,
-        })
+        return JSONResponse(
+            {
+                "conversation_id": str(conv_id),
+                "status": status,
+                "messages_inserted": inserted,
+                "messages_skipped": skipped,
+            }
+        )
 
     # ---- Handoff route (for side panel) ----
 
