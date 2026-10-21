@@ -38,7 +38,10 @@ async def client():
     configure_logging("INFO")
 
     # Initialize database so get_services() works.
+    from personal_context_mcp.db.migrate import apply_migrations
+
     db = await Database.connect(settings)
+    await apply_migrations(db)
     set_database(db)
 
     app = create_app(settings)
