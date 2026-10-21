@@ -166,8 +166,15 @@ def build_ingest_routes(settings: Settings) -> list:
 
         title = body.get("title")
         model = body.get("model")
-        updated_at = body.get("updated_at")
+        updated_at_raw = body.get("updated_at")
         messages = body.get("messages", [])
+
+        # Convert ISO strings to datetime for asyncpg.
+        updated_at = None
+        if updated_at_raw:
+            with contextlib.suppress(ValueError, TypeError):
+                updated_at = datetime.fromisoformat(updated_at_raw.replace("Z", "+00:00"))
+
         # Attachments stored as metadata for now (v1 references only).
         attachments = body.get("attachments", [])
 
