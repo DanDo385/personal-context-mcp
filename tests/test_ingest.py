@@ -14,15 +14,17 @@ from starlette.testclient import TestClient
 
 from conftest import requires_db
 from personal_context_mcp.config import Settings
+from personal_context_mcp.db.pool import Database, set_database
 from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.server import create_app
+from personal_context_mcp.services import set_services
 
 pytestmark = [pytest.mark.anyio, requires_db]
 
 
 @pytest.fixture(scope="module")
-def client():
-    """Create a test client with a fresh app instance."""
+async def client():
+    """Create a test client with a fresh app and initialized services."""
     dsn = os.environ["PC_TEST_DATABASE_URL"]
     settings = Settings(
         environment="dev",
@@ -34,8 +36,18 @@ def client():
         local_storage_root="/tmp/pc-test-storage",
     )
     configure_logging("INFO")
+
+    # Initialize database so get_services() works.
+    db = await Database.connect(settings)
+    set_database(db)
+
     app = create_app(settings)
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
+
+    await db.close()
+    set_database(None)
+    set_services(None)
 
 
 @pytest.fixture(scope="module")
