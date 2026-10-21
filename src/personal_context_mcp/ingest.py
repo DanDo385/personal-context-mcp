@@ -213,6 +213,7 @@ def build_ingest_routes(settings: Settings) -> list:
             content = msg["content"]
             msg_model = msg.get("model")
             msg_created_at = msg.get("created_at")
+            content_hash = sha256_text(content)
 
             result = await db.fetchval(
                 """
@@ -221,12 +222,11 @@ def build_ingest_routes(settings: Settings) -> list:
                     model, role, content, content_sha256,
                     provenance, sequence, created_at, metadata
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6,
-                    encode(sha256($6::bytea), 'hex'),
+                    $1, $2, $3, $4, $5, $6, $7,
                     'imported_metadata'::pc_provenance,
                     (SELECT coalesce(max(sequence), -1) + 1
                      FROM messages WHERE conversation_id = $1),
-                    coalesce($7::timestamptz, now()),
+                    coalesce($8::timestamptz, now()),
                     '{}'::jsonb
                 )
                 ON CONFLICT (conversation_id, provider_message_id)
@@ -240,6 +240,7 @@ def build_ingest_routes(settings: Settings) -> list:
                 msg_model,
                 role,
                 content,
+                content_hash,
                 msg_created_at,
             )
             if result:
