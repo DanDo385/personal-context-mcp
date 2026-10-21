@@ -280,6 +280,8 @@ async def test_a_recommendation_is_not_recorded_as_the_users_decision(world) -> 
 
 async def test_one_odd_note_class_does_not_break_note_search(world, db) -> None:
     client, _ = world
+    # A database from before 0009 could hold any value.
+    await db.execute("ALTER TABLE notes DROP CONSTRAINT notes_note_class_check")
     await db.execute("UPDATE notes SET note_class = 'scratchpad' WHERE slug = 'n-crdt'")
     found = await client.call_tool("note_search", {"query": "CRDT"})
     assert [n.note_class for n in found.data] == ["inbox"]
@@ -290,3 +292,10 @@ async def test_one_odd_note_class_does_not_break_note_search(world, db) -> None:
         raise_on_error=False,
     )
     assert refused.is_error
+
+
+async def test_the_database_refuses_an_unknown_note_class(world, db) -> None:
+    import asyncpg
+
+    with pytest.raises(asyncpg.CheckViolationError):
+        await db.execute("UPDATE notes SET note_class = 'scratchpad' WHERE slug = 'n-crdt'")
