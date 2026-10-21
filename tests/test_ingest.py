@@ -12,11 +12,10 @@ import os
 import pytest
 from starlette.testclient import TestClient
 
+from conftest import requires_db
 from personal_context_mcp.config import Settings
 from personal_context_mcp.logging_setup import configure_logging
 from personal_context_mcp.server import create_app
-
-from .conftest import requires_db
 
 pytestmark = [pytest.mark.anyio, requires_db]
 
@@ -26,13 +25,13 @@ def client():
     """Create a test client with a fresh app instance."""
     dsn = os.environ["PC_TEST_DATABASE_URL"]
     settings = Settings(
-        PC_ENVIRONMENT="dev",
-        PC_DATABASE_URL=dsn,
-        PC_AUTH_MODE="none",
-        PC_CLASSIFIER="rules",
-        PC_EMBEDDING_PROVIDER="none",
-        PC_STORAGE_BACKEND="local",
-        PC_LOCAL_STORAGE_ROOT="/tmp/pc-test-storage",
+        environment="dev",
+        database_url=dsn,
+        auth_mode="none",
+        classifier="rules",
+        embedding_provider="none",
+        storage_backend="local",
+        local_storage_root="/tmp/pc-test-storage",
     )
     configure_logging("INFO")
     app = create_app(settings)
