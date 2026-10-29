@@ -1,4 +1,4 @@
--- 0009_note_class_check.sql
+-- 0010_note_class_check.sql
 -- Enforce the note_class vocabulary in the database, not only in the server.
 -- Values outside it become 'inbox'; the old values are kept in
 -- note_class_repairs so the repair can be undone.
@@ -8,7 +8,7 @@
 --   UPDATE notes n SET note_class = r.old_class
 --     FROM note_class_repairs r WHERE r.note_id = n.id;
 --   DROP TABLE IF EXISTS note_class_repairs;
---   DELETE FROM schema_migrations WHERE version = '0009_note_class_check';
+--   DELETE FROM schema_migrations WHERE version = '0010_note_class_check';
 
 CREATE TABLE IF NOT EXISTS note_class_repairs (
     note_id     UUID PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,

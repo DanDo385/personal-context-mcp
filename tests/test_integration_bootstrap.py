@@ -280,7 +280,7 @@ async def test_a_recommendation_is_not_recorded_as_the_users_decision(world) -> 
 
 async def test_one_odd_note_class_does_not_break_note_search(world, db) -> None:
     client, _ = world
-    # A database from before 0009 could hold any value.
+    # A database from before 0010 could hold any value.
     await db.execute("ALTER TABLE notes DROP CONSTRAINT notes_note_class_check")
     await db.execute("UPDATE notes SET note_class = 'scratchpad' WHERE slug = 'n-crdt'")
     found = await client.call_tool("note_search", {"query": "CRDT"})
