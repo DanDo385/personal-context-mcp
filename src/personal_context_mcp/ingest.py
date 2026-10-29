@@ -122,9 +122,7 @@ def build_ingest_routes(settings: Settings) -> list:
                 pairing_code,
             )
             if row is None:
-                return JSONResponse(
-                    {"error": "invalid or expired pairing code"}, status_code=403
-                )
+                return JSONResponse({"error": "invalid or expired pairing code"}, status_code=403)
 
             device_id = f"dev_{secrets.token_urlsafe(12)}"
             token = _make_token()

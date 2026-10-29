@@ -39,9 +39,7 @@ async def pairing_code(services):
 
 @pytest.fixture
 async def device_token(client, pairing_code):
-    response = await client.post(
-        "/api/v1/auth/pair-device", json={"pairing_code": pairing_code}
-    )
+    response = await client.post("/api/v1/auth/pair-device", json={"pairing_code": pairing_code})
     assert response.status_code == 200
     return response.json()["device_token"]
 
@@ -54,26 +52,20 @@ def _load_fixture(provider: str) -> dict:
 
 
 async def test_legacy_unauthenticated_registration_is_disabled(client):
-    response = await client.post(
-        "/api/v1/auth/register-device", json={"device_name": "attacker"}
-    )
+    response = await client.post("/api/v1/auth/register-device", json={"device_name": "attacker"})
     assert response.status_code == 404
 
 
 async def test_pairing_code_is_single_use_under_concurrent_requests(client, pairing_code):
     async def pair():
-        return await client.post(
-            "/api/v1/auth/pair-device", json={"pairing_code": pairing_code}
-        )
+        return await client.post("/api/v1/auth/pair-device", json={"pairing_code": pairing_code})
 
     first, second = await asyncio.gather(pair(), pair())
     assert sorted([first.status_code, second.status_code]) == [200, 403]
 
 
 async def test_pairing_rejects_unknown_code(client):
-    response = await client.post(
-        "/api/v1/auth/pair-device", json={"pairing_code": "UNKNOWN42"}
-    )
+    response = await client.post("/api/v1/auth/pair-device", json={"pairing_code": "UNKNOWN42"})
     assert response.status_code == 403
 
 
@@ -187,8 +179,6 @@ async def test_ingest_append_messages(client, device_token, provider):
 async def test_revoke_device(client, device_token, services):
     """Revoking a device token invalidates it."""
     # The fixture token is paired through the one-time-code endpoint.
-    from personal_context_mcp.ingest import _validate_device_token
-
     device_token_new = device_token
     device_id = await services.db.fetchval(
         "SELECT device_id FROM device_tokens WHERE token = $1", device_token

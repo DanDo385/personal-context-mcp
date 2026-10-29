@@ -1,5 +1,15 @@
 # Browser Extension — Handoff
 
+## Server skills release status (2026-10-29)
+
+The `feat-server-skills` branch is rebased on `origin/main` after the browser pairing security PR merged (`d294678`). It adds named search, save, email and vault workflows, reusing existing MCP tools where possible. The email draft migration `0009_email_drafts.sql` was checked against production's `schema_migrations` ledger in a read-only transaction; its SHA-256 matches. Keep that file unchanged. The pairing migration is `0009_pairing_codes.sql`; migration versions use full filenames, so the ledger records distinct versions.
+
+Email is disabled by default. `PC_AGENTMAIL_API_KEY` and `PC_AGENTMAIL_INBOX_ID` are unset. The branch removes the legacy unauthenticated device registration endpoint, retains one-time pairing, and consumes pairing codes atomically under a row lock.
+
+On the rebased tree, Ruff lint, formatting, and mypy pass. The full suite passes: 481 tests, including database integration tests. The Vercel preview returns the application's 503 not-configured response because the Preview environment has no environment variables. Production settings are not copied into Preview because that would expose the production database to an unmerged build. Configure an isolated preview database and Preview-scoped settings, then verify `/healthz`, `/readyz`, and MCP before merge.
+
+The read-only production ledger check confirms the SHA-256 for both `0009_email_drafts` and `0009_pairing_codes` matches the migration files. Production records both migrations, the email drafts table, the Codex provider and device tokens. After Preview is configured and verified, merge `feat-server-skills`, check the production deployment and MCP, then remove the idle merged worktree and branch. A Codex `session_checkpoint` should record the release and report zero queued vault jobs.
+
 ## What was built
 
 ### Extension (`extension/`)
