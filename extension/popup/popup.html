@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>Personal Context</title>
   <style>
-    body { width: 280px; font-family: system-ui, sans-serif; font-size: 13px; margin: 0; padding: 12px; }
+    body { width: 300px; font-family: system-ui, sans-serif; font-size: 13px; margin: 0; padding: 12px; }
     h2 { margin: 0 0 8px; font-size: 14px; }
     .provider { margin: 8px 0; padding: 8px; border-radius: 6px; background: #f5f5f5; }
     .provider-name { font-weight: 600; }
@@ -16,22 +16,38 @@
     .pause-btn { background: #ff9800; color: white; }
     .pause-btn.paused { background: #4caf50; }
     .capture-btn { background: #5b3f87; color: white; }
+    .pair-btn { background: #1976d2; color: white; width: 100%; margin-top: 4px; }
     .dead-letter { margin-top: 8px; font-size: 11px; color: #d32f2f; }
     .hidden { display: none; }
+    .pair-section { margin: 12px 0; padding: 10px; background: #e3f2fd; border-radius: 6px; }
+    .pair-section p { margin: 0 0 6px; font-size: 12px; }
+    .pair-input { width: 100%; padding: 6px; border: 1px solid #90caf9; border-radius: 4px; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; font-family: monospace; box-sizing: border-box; }
+    .pair-error { color: #d32f2f; font-size: 11px; margin-top: 4px; }
+    .pair-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 4px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <h2>Personal Context</h2>
 
-  <div id="providers"></div>
-
-  <div class="controls">
-    <button id="pauseBtn" class="pause-btn">Pause</button>
-    <button id="captureBtn" class="capture-btn">Save Now</button>
+  <div id="pairSection" class="pair-section hidden">
+    <p><strong>Not paired.</strong> Run this on the server:</p>
+    <p style="font-family: monospace; font-size: 11px; background: #fff; padding: 4px;">personal-context-mcp pair-device</p>
+    <p>Then enter the 8-character code:</p>
+    <input id="pairInput" class="pair-input" type="text" maxlength="8" placeholder="ABCD1234" autocomplete="off">
+    <div id="pairError" class="pair-error hidden"></div>
+    <button id="pairBtn" class="pair-btn">Pair this browser</button>
   </div>
 
-  <div id="deadLetter" class="dead-letter hidden"></div>
+  <div id="mainSection" class="hidden">
+    <div id="providers"></div>
+    <div class="controls">
+      <button id="pauseBtn" class="pause-btn">Pause</button>
+      <button id="captureBtn" class="capture-btn">Save Now</button>
+    </div>
+    <div id="deadLetter" class="dead-letter hidden"></div>
+  </div>
 
-  <script src="popup.js"></script>
+  <script src="popup.js" type="module"></script>
 </body>
 </html>

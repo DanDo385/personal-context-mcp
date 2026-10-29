@@ -1,5 +1,7 @@
 // Personal Context — popup script.
-// Shows sync status per provider, pause toggle, dead letter queue.
+// Shows sync status per provider, pause toggle, pairing flow.
+
+import { isPaired, pairDevice } from '../lib/api.js';
 
 const providers = ['claude', 'chatgpt', 'gemini', 'grok'];
 const providerNames = {
@@ -10,6 +12,54 @@ const providerNames = {
 };
 
 async function init() {
+  const paired = await isPaired();
+
+  if (!paired) {
+    // Show pairing section.
+    document.getElementById('pairSection').classList.remove('hidden');
+    document.getElementById('mainSection').classList.add('hidden');
+
+    const pairInput = document.getElementById('pairInput');
+    const pairBtn = document.getElementById('pairBtn');
+    const pairError = document.getElementById('pairError');
+
+    pairInput.focus();
+
+    const doPair = async () => {
+      const code = pairInput.value.trim().toUpperCase();
+      if (code.length !== 8) {
+        pairError.textContent = 'Enter the 8-character code.';
+        pairError.classList.remove('hidden');
+        return;
+      }
+
+      pairBtn.disabled = true;
+      pairBtn.innerHTML = '<span class="pair-spinner"></span>Pairing...';
+      pairError.classList.add('hidden');
+
+      try {
+        await pairDevice(code);
+        // Re-init to show main section.
+        init();
+      } catch (err) {
+        pairError.textContent = err.message;
+        pairError.classList.remove('hidden');
+        pairBtn.disabled = false;
+        pairBtn.textContent = 'Pair this browser';
+      }
+    };
+
+    pairBtn.onclick = doPair;
+    pairInput.onkeydown = (e) => {
+      if (e.key === 'Enter') doPair();
+    };
+    return;
+  }
+
+  // Paired — show main section.
+  document.getElementById('pairSection').classList.add('hidden');
+  document.getElementById('mainSection').classList.remove('hidden');
+
   // Get status from service worker.
   const status = await chrome.runtime.sendMessage({ action: 'getStatus' });
   const { lastSync = {}, isPaused, deadLength, queueLength } = status;
@@ -42,7 +92,6 @@ async function init() {
     container.appendChild(div);
   }
 
-  // Queue info.
   if (queueLength > 0) {
     const queueInfo = document.createElement('div');
     queueInfo.className = 'provider-status';
@@ -61,12 +110,10 @@ async function init() {
   }
 
   pauseBtn.onclick = async () => {
-    const newState = !isPaused;
     await chrome.runtime.sendMessage({
       action: 'setPaused',
-      paused: newState,
+      paused: !isPaused,
     });
-    // Re-init to reflect new state.
     init();
   };
 
@@ -88,7 +135,7 @@ async function init() {
   if (deadLength > 0) {
     const dl = document.getElementById('deadLetter');
     dl.className = 'dead-letter';
-    dl.textContent = `${deadLength} item(s) failed after retries. Check the server.`;
+    dl.textContent = `${deadLength} item(s) failed. Check the server.`;
   }
 }
 

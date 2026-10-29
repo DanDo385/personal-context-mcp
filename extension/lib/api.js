@@ -1,5 +1,6 @@
 // Personal Context — HTTPS ingest client.
-// Sends conversations to the server with chunked, gzip, resumable uploads.
+// Sends conversations to the server. Never auto-registers on 401;
+// the user must pair the browser with a code from the server CLI.
 
 const DEFAULT_SERVER_URL = 'https://personal-context-mcp-seven.vercel.app';
 const FALLBACK_SERVER_URL = 'https://mbp.tailfbd394.ts.net';
@@ -8,9 +9,7 @@ const FALLBACK_SERVER_URL = 'https://mbp.tailfbd394.ts.net';
  * Get the configured server URL, with fallback.
  */
 async function getServerUrl() {
-  const { serverUrl, fallbackUrl } = await chrome.storage.local.get([
-    'serverUrl', 'fallbackUrl',
-  ]);
+  const { serverUrl } = await chrome.storage.local.get('serverUrl');
   return serverUrl || DEFAULT_SERVER_URL;
 }
 
@@ -23,33 +22,52 @@ async function getDeviceToken() {
 }
 
 /**
- * Register this browser as a device, obtaining a token.
+ * Check if this browser is paired (has a valid token).
  */
-async function registerDevice(serverUrl) {
+async function isPaired() {
+  const token = await getDeviceToken();
+  return token !== null;
+}
+
+/**
+ * Pair this browser using a one-time code from `personal-context-mcp pair-device`.
+ * Returns the device token on success.
+ */
+async function pairDevice(pairingCode) {
+  const serverUrl = await getServerUrl();
   const deviceName = `browser-${navigator.userAgent.slice(0, 60)}`;
-  const resp = await fetch(`${serverUrl}/api/v1/auth/register-device`, {
+  const resp = await fetch(`${serverUrl}/api/v1/auth/pair-device`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ device_name: deviceName }),
+    body: JSON.stringify({
+      pairing_code: pairingCode,
+      device_name: deviceName,
+    }),
   });
   if (!resp.ok) {
-    throw new Error(`Device registration failed: ${resp.status}`);
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Pairing failed: ${resp.status}`);
   }
   const { device_token, device_id } = await resp.json();
-  await chrome.storage.local.set({ deviceToken: device_token, deviceId: device_id });
+  await chrome.storage.local.set({
+    deviceToken: device_token,
+    deviceId: device_id,
+    paired: true,
+  });
   return device_token;
 }
 
 /**
  * Send a single conversation to the ingest endpoint.
  * Returns { conversation_id, status, messages_inserted, messages_skipped }.
+ * Throws on 401 (not paired) — never auto-registers.
  */
 async function ingestConversation(payload) {
   const serverUrl = await getServerUrl();
-  let token = await getDeviceToken();
+  const token = await getDeviceToken();
 
   if (!token) {
-    token = await registerDevice(serverUrl);
+    throw new Error('Browser not paired. Use "Pair this browser" in the popup.');
   }
 
   const body = JSON.stringify(payload);
@@ -63,20 +81,10 @@ async function ingestConversation(payload) {
   });
 
   if (resp.status === 401) {
-    // Token expired or revoked — re-register and retry once.
-    token = await registerDevice(serverUrl);
-    const retry = await fetch(`${serverUrl}/api/v1/ingest/conversation`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body,
-    });
-    if (!retry.ok) {
-      throw new Error(`Ingest failed after re-auth: ${retry.status} ${await retry.text()}`);
-    }
-    return retry.json();
+    // Token expired or revoked — clear it and tell the user.
+    await chrome.storage.local.remove(['deviceToken', 'deviceId']);
+    await chrome.storage.local.set({ paired: false });
+    throw new Error('Device token expired or revoked. Re-pair the browser.');
   }
 
   if (!resp.ok) {
@@ -86,4 +94,4 @@ async function ingestConversation(payload) {
   return resp.json();
 }
 
-export { getServerUrl, getDeviceToken, registerDevice, ingestConversation };
+export { getServerUrl, getDeviceToken, isPaired, pairDevice, ingestConversation };

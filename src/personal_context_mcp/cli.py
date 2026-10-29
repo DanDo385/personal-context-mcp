@@ -203,6 +203,42 @@ def migrate(status: bool) -> None:
     asyncio.run(run())
 
 
+@main.command(name="pair-device")
+@click.option("--device-name", default="", help="Label for the browser being paired.")
+def pair_device(device_name: str) -> None:
+    """Generate a one-time pairing code for a browser extension.
+
+    Run this, then enter the code in the extension popup within 5 minutes.
+    """
+    settings = get_settings()
+    _configure_cli_logging(settings)
+
+    import secrets as _secrets
+
+    code = "".join(_secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
+
+    async def run() -> None:
+        db = await Database.connect(settings)
+        try:
+            await db.execute(
+                """
+                INSERT INTO pairing_codes (code, device_name)
+                VALUES ($1, $2)
+                """,
+                code,
+                device_name or None,
+            )
+        finally:
+            await db.close()
+
+    import asyncio as _asyncio
+
+    _asyncio.run(run())
+
+    click.secho(f"\n  Pairing code: {click.style(code, bold=True, fg='green')}", fg="white")
+    click.secho("  Enter this code in the extension popup within 5 minutes.\n", fg="white")
+
+
 @main.command()
 def check() -> None:
     """Validate configuration and connectivity without starting the server."""

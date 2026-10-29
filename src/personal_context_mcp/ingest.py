@@ -123,7 +123,7 @@ def build_ingest_routes(settings: Settings) -> list:
         if device is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
 
-        # Only allow self-revocation or admin (future).
+        # Only allow self-revocation.
         if device["device_id"] != device_id:
             return JSONResponse({"error": "can only revoke own device"}, status_code=403)
 
@@ -134,6 +134,71 @@ def build_ingest_routes(settings: Settings) -> list:
 
         logger.info("device revoked", extra={"device_id": device_id})
         return JSONResponse({"ok": True, "device_id": device_id})
+
+    async def pair_device(request: Request) -> JSONResponse:
+        """Pair a browser using a one-time code from the server CLI."""
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid json"}, status_code=400)
+
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "expected object"}, status_code=400)
+
+        pairing_code = (body.get("pairing_code") or "").strip().upper()
+        device_name = body.get("device_name", "unknown")
+
+        if not pairing_code:
+            return JSONResponse({"error": "pairing_code is required"}, status_code=400)
+
+        db = get_services().db
+
+        # Look up the code — must exist, be unused, and not expired.
+        row = await db.fetchrow(
+            """
+            SELECT id, device_name
+            FROM pairing_codes
+            WHERE code = $1 AND used_at IS NULL AND expires_at > now()
+            """,
+            pairing_code,
+        )
+
+        if row is None:
+            return JSONResponse({"error": "invalid or expired pairing code"}, status_code=403)
+
+        # Create device token.
+        device_id = f"dev_{secrets.token_urlsafe(12)}"
+        token = _make_token()
+
+        await db.execute(
+            """
+            INSERT INTO device_tokens (device_id, token, device_name)
+            VALUES ($1, $2, $3)
+            """,
+            device_id,
+            token,
+            device_name or row["device_name"] or "unknown",
+        )
+
+        # Mark code as used.
+        await db.execute(
+            "UPDATE pairing_codes SET used_at = now(), used_by_device_id = $1 WHERE id = $2",
+            device_id,
+            row["id"],
+        )
+
+        logger.info(
+            "device paired",
+            extra={"device_id": device_id, "device_name": device_name},
+        )
+
+        return JSONResponse(
+            {
+                "device_id": device_id,
+                "device_token": token,
+                "device_name": device_name,
+            }
+        )
 
     # ---- Ingest route ----
 
@@ -349,6 +414,7 @@ def build_ingest_routes(settings: Settings) -> list:
 
     return [
         Route("/api/v1/auth/register-device", register_device, methods=["POST"]),
+        Route("/api/v1/auth/pair-device", pair_device, methods=["POST"]),
         Route("/api/v1/auth/devices/{device_id}", revoke_device, methods=["DELETE"]),
         Route("/api/v1/ingest/conversation", ingest_conversation, methods=["POST"]),
         Route("/api/v1/handoff", handoff, methods=["GET"]),
